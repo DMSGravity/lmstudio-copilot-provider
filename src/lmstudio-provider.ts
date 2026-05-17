@@ -8,6 +8,7 @@ import { LMStudioModel, ChatMessage, ChatTool, ChatMessageContentPart } from './
 interface LMStudioModelInfo extends vscode.LanguageModelChatInformation {
   lmstudioModelId: string;
   isLoaded: boolean;
+  isUserSelectable: boolean;
 }
 
 /**
@@ -123,6 +124,7 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
       maxOutputTokens,
       lmstudioModelId: model.id,
       isLoaded: Boolean(model.loaded),
+      isUserSelectable: true,
       capabilities: {
         toolCalling: enableToolCalling,
         imageInput: model.capabilities?.vision ?? false,

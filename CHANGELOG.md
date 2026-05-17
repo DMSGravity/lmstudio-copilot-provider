@@ -1,3 +1,7 @@
+# Unreleased
+
+- Fix LM Studio models not appearing in the VS Code 1.120 model picker by marking discovered models as user-selectable.
+
 # Changelog
 
 All notable changes to this project will be documented in this file.
