@@ -13,7 +13,7 @@
     "url": "https://github.com/yoy123/lmstudio-copilot-provider/issues"
   },
   "homepage": "https://github.com/yoy123/lmstudio-copilot-provider#readme",
-  "icon": "assets/Latest.png",
+  "icon": "assets/icon.svg",
   "engines": {
     "vscode": "^1.104.0"
   },
