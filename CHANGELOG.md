@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.17] - 2026-05-19
+
+### Change 17
+
+- Switch the Marketplace icon to `assets/Latest.png` and republish the extension as a follow-up release.
+
 ## [0.1.16] - 2026-05-19
 
 ### Change 16
