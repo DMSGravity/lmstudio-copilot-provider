@@ -187,7 +187,7 @@ export class LMStudioClient {
     }
   }
 
-  private isLocalServerUrl(): boolean {
+  public isLocalServerUrl(): boolean {
     const url = this.parseServerUrl();
     if (!url) {
       return false;
@@ -301,6 +301,11 @@ export class LMStudioClient {
   }
 
   async getInstalledModels(): Promise<LMStudioModel[]> {
+    if (!this.isLocalServerUrl()) {
+      this.log('Skipping local `lms ls` because the configured server URL is not local');
+      return [];
+    }
+
     const rawModels = await this.execLmsJson<LMStudioLocalModel[]>(['ls', '--json'], this.getConfig().requestTimeout);
     if (!Array.isArray(rawModels)) {
       return [];
@@ -327,6 +332,12 @@ export class LMStudioClient {
   }
 
   async getLoadedModelIds(): Promise<Set<string>> {
+    if (!this.isLocalServerUrl()) {
+      this.log('Skipping local `lms ps` because the configured server URL is not local');
+      const liveModels = await this.getModels();
+      return new Set(liveModels.map((model) => model.id));
+    }
+
     const rawModels = await this.execLmsJson<LMStudioLocalModel[]>(['ps', '--json'], this.getConfig().requestTimeout);
     if (!Array.isArray(rawModels)) {
       return new Set<string>();
@@ -375,6 +386,11 @@ export class LMStudioClient {
   }
 
   async stopServer(): Promise<boolean> {
+    if (!this.isLocalServerUrl()) {
+      this.log('Skipping local CLI stop because the configured server URL is not local');
+      return false;
+    }
+
     const result = await this.execLms(['server', 'stop'], 30000);
     if (result.exitCode !== 0) {
       return false;
@@ -385,6 +401,16 @@ export class LMStudioClient {
   }
 
   async ensureModelLoaded(modelId: string): Promise<boolean> {
+    if (!this.isLocalServerUrl()) {
+      const serverReady = await this.checkConnection();
+      if (!serverReady) {
+        this.log(`Cannot load model ${modelId} because the LM Studio server is unavailable`);
+        return false;
+      }
+
+      return this.waitForModelAvailability(modelId, Math.max(this.getConfig().requestTimeout, 10 * 60 * 1000));
+    }
+
     const serverReady = await this.ensureServerRunning();
     if (!serverReady) {
       this.log(`Cannot load model ${modelId} because the LM Studio server is unavailable`);

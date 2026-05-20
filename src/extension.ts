@@ -71,6 +71,11 @@ export async function activate(context: vscode.ExtensionContext) {
   const ensureServerRunning = async (): Promise<boolean> => {
     outputChannel.appendLine('Ensuring LM Studio server is running...');
 
+    if (!client.isLocalServerUrl()) {
+      outputChannel.appendLine('Remote server configured; skipping local CLI auto-start and terminal fallback');
+      return await client.checkConnection();
+    }
+
     const startedViaCli = await client.ensureServerRunning();
     if (startedViaCli) {
       outputChannel.appendLine('✅ LM Studio server is reachable');
@@ -113,6 +118,11 @@ export async function activate(context: vscode.ExtensionContext) {
   // Register commands
   context.subscriptions.push(
     vscode.commands.registerCommand('lmstudio-copilot.startServer', async () => {
+      if (!client.isLocalServerUrl()) {
+        vscode.window.showWarningMessage('Configured LM Studio server is remote; start it on the remote host instead of using the local CLI.');
+        return;
+      }
+
       const started = await ensureServerRunning();
       if (started) {
         vscode.window.showInformationMessage('LM Studio server is running');
@@ -123,6 +133,11 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lmstudio-copilot.stopServer', async () => {
+      if (!client.isLocalServerUrl()) {
+        vscode.window.showWarningMessage('Configured LM Studio server is remote; stop it on the remote host instead of using the local CLI.');
+        return;
+      }
+
       const stopped = await client.stopServer();
       if (stopped) {
         lmStudioTerminal?.dispose();

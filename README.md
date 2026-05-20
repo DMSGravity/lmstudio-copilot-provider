@@ -2,7 +2,7 @@
 
 Run local LM Studio models inside VS Code Copilot Chat with streaming responses, tool calling, and optional image generation.
 
-If LM Studio is installed on your machine, the extension is designed to work out of the box.
+If LM Studio is installed on your machine, the extension is designed to work out of the box. It also supports connecting to remote LM Studio servers.
 
 Install from the VS Code Marketplace:
 
@@ -12,13 +12,15 @@ Install from the VS Code Marketplace:
 
 - Adds LM Studio models to the Copilot Chat model picker
 - Streams responses directly into VS Code chat
-- Can auto-start LM Studio and lazy-load the selected model on first use
+- Can auto-start LM Studio and lazy-load the selected model on first use (when using localhost)
+- Supports remote LM Studio servers without local CLI dependencies
 
 ## Requirements
 
 - VS Code 1.104.0 or later
-- LM Studio installed locally
-- LM Studio local server available at `http://localhost:1234` unless you changed it
+- LM Studio server accessible at the configured URL (default: `http://localhost:1234`)
+- For local usage: LM Studio installed on your machine
+- For remote usage: Access to a running LM Studio server on another machine
 
 ## Quick Start
 
@@ -27,13 +29,23 @@ Install from the VS Code Marketplace:
 3. Pick an LM Studio model.
 4. Send a prompt.
 
-No separate CLI install, PATH setup, or manual model preload should be required.
+No separate CLI install, PATH setup, or manual model preload should be required for local setups.
+
+## Remote Server Usage
+
+You can connect to an LM Studio server running on a remote machine:
+
+1. Set `lmstudio-copilot.serverUrl` to the remote server's URL (e.g., `http://your-server:1234`).
+2. Ensure the remote server is running and accessible.
+3. When using a remote server, local CLI features (auto-start, model discovery via CLI) are automatically disabled to avoid attempting to control the remote instance.
+
+This is useful for setups where LM Studio runs on a dedicated server or in a container.
 
 ## About The CLI
 
 You do not need to install the LM Studio CLI separately.
 
-The CLI ships with LM Studio, and the extension will try to find it automatically.
+The CLI ships with LM Studio, and the extension will try to find it automatically for local installations.
 
 The extension tries to find the CLI in this order:
 
@@ -41,7 +53,7 @@ The extension tries to find the CLI in this order:
 - `lms` on `PATH`
 - common LM Studio install locations
 
-For most users, nothing needs to be configured here.
+For most users, nothing needs to be configured here. CLI features are skipped when using remote servers.
 
 ## Important Settings
 
