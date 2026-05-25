@@ -29,14 +29,52 @@ interface Config {
 // These are known LM Studio default addresses — if the user has pointed imageGenEndpointUrl
 // at their LM Studio server, we catch it and explain what's needed.
 const LMSTUDIO_HOSTS = ['localhost:1234', '127.0.0.1:1234', '0.0.0.0:1234'];
+const DEFAULT_DALLE_MODEL = 'dall-e-3';
+const DALLE_MODEL_ALIASES: Record<string, string> = {
+  'dall-e-2': DEFAULT_DALLE_MODEL,
+  'dall-e2': DEFAULT_DALLE_MODEL,
+  'dalle-2': DEFAULT_DALLE_MODEL,
+  'dalle2': DEFAULT_DALLE_MODEL,
+  'dall-e-3': DEFAULT_DALLE_MODEL,
+  'dall-e3': DEFAULT_DALLE_MODEL,
+  'dalle-3': DEFAULT_DALLE_MODEL,
+  'dalle3': DEFAULT_DALLE_MODEL,
+};
+
+function normalizeDalleModel(model: string): string {
+  const trimmedModel = model.trim();
+  const normalizedKey = trimmedModel.toLowerCase().replace(/\s+/g, '');
+
+  if (!normalizedKey) {
+    return DEFAULT_DALLE_MODEL;
+  }
+
+  const aliasedModel = DALLE_MODEL_ALIASES[normalizedKey];
+  if (aliasedModel) {
+    return aliasedModel;
+  }
+
+  return trimmedModel;
+}
+
+function formatDalleError(rawText: string, model: string): string {
+  if (/"param"\s*:\s*"model"/i.test(rawText) && /"code"\s*:\s*"invalid_value"/i.test(rawText)) {
+    return `DALL-E API rejected image model "${model}". Use lmstudio-copilot.imageGenModel = "${DEFAULT_DALLE_MODEL}" for OpenAI, or set it to your backend's exact supported image model name if you are using another OpenAI-compatible image server. Raw error: ${rawText}`;
+  }
+
+  return `DALL-E API error: ${rawText}`;
+}
 
 function getConfig(): Config {
   const cfg = vscode.workspace.getConfiguration('lmstudio-copilot');
   // Default is intentionally empty — user must configure a real image gen server.
+  const backend = cfg.get<'dalle' | 'a1111'>('imageGenBackend', 'dalle');
+  const configuredModel = cfg.get<string>('imageGenModel', DEFAULT_DALLE_MODEL);
+
   return {
-    backend: cfg.get<'dalle' | 'a1111'>('imageGenBackend', 'dalle'),
+    backend,
     endpointUrl: cfg.get<string>('imageGenEndpointUrl', ''),
-    model: cfg.get<string>('imageGenModel', 'dall-e-3'),
+    model: backend === 'dalle' ? normalizeDalleModel(configuredModel) : configuredModel.trim(),
     defaultWidth: cfg.get<number>('imageGenWidth', 1024),
     defaultHeight: cfg.get<number>('imageGenHeight', 1024),
     defaultSteps: cfg.get<number>('imageGenSteps', 20),
@@ -79,6 +117,24 @@ function workspaceRoot(): string {
   return vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd();
 }
 
+function joinEndpointUrl(endpointUrl: string, apiPath: string): string {
+  const trimmedEndpoint = endpointUrl.trim().replace(/\/+$/, '');
+  if (!trimmedEndpoint) {
+    return apiPath;
+  }
+
+  if (trimmedEndpoint.endsWith(apiPath)) {
+    return trimmedEndpoint;
+  }
+
+  const apiBase = apiPath.slice(0, apiPath.lastIndexOf('/'));
+  if (apiBase && trimmedEndpoint.endsWith(apiBase)) {
+    return `${trimmedEndpoint}${apiPath.slice(apiBase.length)}`;
+  }
+
+  return `${trimmedEndpoint}${apiPath}`;
+}
+
 function makeResult(text: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]);
 }
@@ -94,6 +150,7 @@ async function generateDalle(
   signal: AbortSignal,
   outputChannel: vscode.OutputChannel
 ): Promise<Uint8Array> {
+  const generationsUrl = joinEndpointUrl(config.endpointUrl, '/v1/images/generations');
   const width = input.width ?? config.defaultWidth;
   const height = input.height ?? config.defaultHeight;
 
@@ -106,10 +163,7 @@ async function generateDalle(
     size: `${width}x${height}`,
   };
 
-  // Only send model if it's configured (some local servers ignore / reject it)
-  if (config.model && config.model !== 'dall-e-3') {
-    body.model = config.model;
-  } else if (config.model) {
+  if (config.model) {
     body.model = config.model;
   }
 
@@ -118,10 +172,10 @@ async function generateDalle(
     headers['Authorization'] = `Bearer ${config.apiKey}`;
   }
 
-  outputChannel.appendLine(`[generate_image] POST ${config.endpointUrl}/v1/images/generations`);
+  outputChannel.appendLine(`[generate_image] POST ${generationsUrl}`);
   outputChannel.appendLine(`[generate_image] Request body: ${JSON.stringify(body)}`);
 
-  const response = await fetch(`${config.endpointUrl}/v1/images/generations`, {
+  const response = await fetch(generationsUrl, {
     method: 'POST',
     headers,
     body: JSON.stringify(body),
@@ -132,7 +186,7 @@ async function generateDalle(
   outputChannel.appendLine(`[generate_image] Response ${response.status}: ${rawText.slice(0, 500)}`);
 
   if (!response.ok) {
-    throw new Error(`DALL-E API error ${response.status}: ${rawText}`);
+    throw new Error(`${formatDalleError(rawText, config.model)} (HTTP ${response.status})`);
   }
 
   let json: unknown;
@@ -174,6 +228,7 @@ async function generateA1111(
   config: Config,
   signal: AbortSignal
 ): Promise<Uint8Array> {
+  const txt2ImgUrl = joinEndpointUrl(config.endpointUrl, '/sdapi/v1/txt2img');
   const body = {
     prompt: input.prompt,
     negative_prompt: input.negativePrompt ?? '',
@@ -186,7 +241,7 @@ async function generateA1111(
     batch_size: 1,
   };
 
-  const response = await fetch(`${config.endpointUrl}/sdapi/v1/txt2img`, {
+  const response = await fetch(txt2ImgUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),

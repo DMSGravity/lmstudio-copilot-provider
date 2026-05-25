@@ -210,7 +210,7 @@
             "type": "string",
             "default": "dall-e-3",
             "order": 4,
-            "description": "Image model to use for DALL-E backend (e.g. dall-e-3, dall-e-2)."
+            "description": "Image model to use for the OpenAI-compatible image backend. Deprecated values like dall-e-2 are normalized to dall-e-3."
           },
           "lmstudio-copilot.imageGenWidth": {
             "type": "number",
