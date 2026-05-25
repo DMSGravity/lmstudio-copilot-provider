@@ -99,6 +99,8 @@ Use these settings for OpenAI image generation:
 
 `lmstudio-copilot.imageGenApiKey` is completely separate from `lmstudio-copilot.apiKey`. Chat requests keep using the LM Studio server key, and image generation uses only the dedicated image backend key.
 
+For other OpenAI-compatible image servers, do not assume `dall-e-3` exists. Set `lmstudio-copilot.imageGenModel` to the exact model ID exposed by that server, or leave it blank so the extension can avoid forcing the OpenAI default.
+
 ## Troubleshooting
 
 ### Models not appearing

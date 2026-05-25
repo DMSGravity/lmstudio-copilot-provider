@@ -57,19 +57,99 @@ function normalizeDalleModel(model: string): string {
   return trimmedModel;
 }
 
-function formatDalleError(rawText: string, model: string): string {
+function isOpenAiImagesEndpoint(endpointUrl: string): boolean {
+  try {
+    const hostname = new URL(endpointUrl).hostname.toLowerCase();
+    return hostname === 'api.openai.com' || hostname.endsWith('.openai.com');
+  } catch {
+    return false;
+  }
+}
+
+function formatAvailableModels(modelIds: string[]): string {
+  if (!modelIds.length) {
+    return '';
+  }
+
+  return ` Available models reported by the server: ${modelIds.join(', ')}.`;
+}
+
+function formatDalleError(rawText: string, model: string, availableModels: string[] = []): string {
   if (/"param"\s*:\s*"model"/i.test(rawText) && /"code"\s*:\s*"invalid_value"/i.test(rawText)) {
-    return `DALL-E API rejected image model "${model}". Use lmstudio-copilot.imageGenModel = "${DEFAULT_DALLE_MODEL}" for OpenAI, or set it to your backend's exact supported image model name if you are using another OpenAI-compatible image server. Raw error: ${rawText}`;
+    return `DALL-E API rejected image model "${model}". Use lmstudio-copilot.imageGenModel = "${DEFAULT_DALLE_MODEL}" for OpenAI, or set it to your backend's exact supported image model name if you are using another OpenAI-compatible image server.${formatAvailableModels(availableModels)} Raw error: ${rawText}`;
   }
 
   return `DALL-E API error: ${rawText}`;
+}
+
+async function fetchAvailableDalleModels(
+  config: Config,
+  signal: AbortSignal,
+  outputChannel: vscode.OutputChannel
+): Promise<string[]> {
+  const modelsUrl = joinEndpointUrl(config.endpointUrl, '/v1/models');
+  const headers: Record<string, string> = {};
+  if (config.apiKey) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  }
+
+  try {
+    outputChannel.appendLine(`[generate_image] GET ${modelsUrl}`);
+    const response = await fetch(modelsUrl, {
+      method: 'GET',
+      headers,
+      signal,
+    });
+
+    if (!response.ok) {
+      outputChannel.appendLine(
+        `[generate_image] Model discovery failed with status ${response.status}`
+      );
+      return [];
+    }
+
+    const json = (await response.json()) as {
+      data?: Array<{ id?: string }>;
+    };
+
+    return json.data
+      ?.map((entry) => entry.id?.trim())
+      .filter((id): id is string => Boolean(id)) ?? [];
+  } catch (error) {
+    outputChannel.appendLine(`[generate_image] Model discovery failed: ${error}`);
+    return [];
+  }
+}
+
+async function resolveDalleModel(
+  config: Config,
+  signal: AbortSignal,
+  outputChannel: vscode.OutputChannel
+): Promise<string | undefined> {
+  if (config.model) {
+    return config.model;
+  }
+
+  if (isOpenAiImagesEndpoint(config.endpointUrl)) {
+    return DEFAULT_DALLE_MODEL;
+  }
+
+  const availableModels = await fetchAvailableDalleModels(config, signal, outputChannel);
+  if (availableModels.length === 1) {
+    outputChannel.appendLine(
+      `[generate_image] Auto-selected sole available image model: ${availableModels[0]}`
+    );
+    return availableModels[0];
+  }
+
+  return undefined;
 }
 
 function getConfig(): Config {
   const cfg = vscode.workspace.getConfiguration('lmstudio-copilot');
   // Default is intentionally empty — user must configure a real image gen server.
   const backend = cfg.get<'dalle' | 'a1111'>('imageGenBackend', 'dalle');
-  const configuredModel = cfg.get<string>('imageGenModel', DEFAULT_DALLE_MODEL);
+  const configuredModel = cfg.get<string>('imageGenModel', '');
 
   return {
     backend,
@@ -153,6 +233,7 @@ async function generateDalle(
   const generationsUrl = joinEndpointUrl(config.endpointUrl, '/v1/images/generations');
   const width = input.width ?? config.defaultWidth;
   const height = input.height ?? config.defaultHeight;
+  const model = await resolveDalleModel(config, signal, outputChannel);
 
   // Do NOT send response_format — many compatible servers (including LM Studio)
   // reject unknown fields or only support the URL format by default.
@@ -163,8 +244,8 @@ async function generateDalle(
     size: `${width}x${height}`,
   };
 
-  if (config.model) {
-    body.model = config.model;
+  if (model) {
+    body.model = model;
   }
 
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
@@ -186,7 +267,11 @@ async function generateDalle(
   outputChannel.appendLine(`[generate_image] Response ${response.status}: ${rawText.slice(0, 500)}`);
 
   if (!response.ok) {
-    throw new Error(`${formatDalleError(rawText, config.model)} (HTTP ${response.status})`);
+    const availableModels =
+      /"param"\s*:\s*"model"/i.test(rawText) && /"code"\s*:\s*"invalid_value"/i.test(rawText)
+        ? await fetchAvailableDalleModels(config, signal, outputChannel)
+        : [];
+    throw new Error(`${formatDalleError(rawText, model ?? '<unspecified>', availableModels)} (HTTP ${response.status})`);
   }
 
   let json: unknown;

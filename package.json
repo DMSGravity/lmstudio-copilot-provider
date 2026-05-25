@@ -190,7 +190,7 @@
             ],
             "default": "dalle",
             "order": 1,
-            "description": "Image generation backend. 'dalle' = OpenAI DALL-E compatible API (also works with LM Studio image models). 'a1111' = Automatic1111 / Stable Diffusion Web UI."
+            "description": "Image generation backend. 'dalle' = OpenAI-compatible image API. 'a1111' = Automatic1111 / Stable Diffusion Web UI."
           },
           "lmstudio-copilot.imageGenEndpointUrl": {
             "type": "string",
@@ -208,9 +208,9 @@
           },
           "lmstudio-copilot.imageGenModel": {
             "type": "string",
-            "default": "dall-e-3",
+            "default": "",
             "order": 4,
-            "description": "Image model to use for the OpenAI-compatible image backend. Deprecated values like dall-e-2 are normalized to dall-e-3."
+            "description": "Image model to use for the OpenAI-compatible image backend. Leave blank to use 'dall-e-3' for OpenAI, or auto-detect/omit the model for other compatible servers. Deprecated values like dall-e-2 are normalized to dall-e-3."
           },
           "lmstudio-copilot.imageGenWidth": {
             "type": "number",
