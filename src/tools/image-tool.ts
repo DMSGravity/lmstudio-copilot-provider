@@ -224,35 +224,131 @@ function makeResult(text: string): vscode.LanguageModelToolResult {
  * Handles both b64_json and url response formats automatically.
  * Returns raw PNG/JPEG bytes.
  */
-async function generateDalle(
-  input: ImageGenInput,
-  config: Config,
+const OPENAI_IMAGE_SIZES: Record<string, [number, number][]> = {
+  'dall-e-2': [[256, 256], [512, 512], [1024, 1024]],
+  'dall-e-3': [[1024, 1024], [1792, 1024], [1024, 1792]],
+  'gpt-image-1': [[1024, 1024], [1536, 1024], [1024, 1536]],
+};
+
+const DEFAULT_OPENAI_IMAGE_SIZES = OPENAI_IMAGE_SIZES['gpt-image-1'];
+
+function getOpenAiSizesForModel(model: string | undefined): [number, number][] | undefined {
+  const normalizedModel = model?.toLowerCase();
+  if (!normalizedModel) {
+    return undefined;
+  }
+
+  const exact = OPENAI_IMAGE_SIZES[normalizedModel];
+  if (exact) {
+    return exact;
+  }
+
+  return Object.entries(OPENAI_IMAGE_SIZES).find(([knownModel]) =>
+    normalizedModel.includes(knownModel)
+  )?.[1];
+}
+
+function snapToSupportedSize(
+  width: number,
+  height: number,
+  supported: [number, number][],
+  outputChannel: vscode.OutputChannel,
+  label: string
+): string {
+  const requested = `${width}x${height}`;
+  if (supported.some(([w, h]) => w === width && h === height)) {
+    return requested;
+  }
+
+  const targetRatio = width / height;
+  let best = supported[0];
+  let bestDiff = Math.abs(best[0] / best[1] - targetRatio);
+  for (const candidate of supported.slice(1)) {
+    const diff = Math.abs(candidate[0] / candidate[1] - targetRatio);
+    if (diff < bestDiff) {
+      best = candidate;
+      bestDiff = diff;
+    }
+  }
+
+  const snapped = `${best[0]}x${best[1]}`;
+  outputChannel.appendLine(
+    `[generate_image] Requested size ${requested} is not supported by ${label}; using ${snapped}.`
+  );
+  return snapped;
+}
+
+function parseSupportedSizes(rawText: string, rejectedSize: string): [number, number][] {
+  const seen = new Set<string>();
+  const sizes: [number, number][] = [];
+  for (const match of rawText.matchAll(/\b(\d{2,5})x(\d{2,5})\b/g)) {
+    const width = Number(match[1]);
+    const height = Number(match[2]);
+    const key = `${width}x${height}`;
+    if (key === rejectedSize || seen.has(key)) {
+      continue;
+    }
+    seen.add(key);
+    sizes.push([width, height]);
+  }
+
+  return sizes;
+}
+
+function isInvalidImageSizeError(rawText: string): boolean {
+  return /invalid size|supported sizes|unsupported size|"param"\s*:\s*"size"/i.test(rawText);
+}
+
+function supportsAutoImageSize(rawText: string): boolean {
+  return /\bauto\b/i.test(rawText);
+}
+
+function chooseInitialDalleSize(
+  endpointUrl: string,
+  model: string | undefined,
+  width: number,
+  height: number,
+  outputChannel: vscode.OutputChannel
+): string | undefined {
+  if (model?.toLowerCase().includes('gpt-image-1') && isOpenAiImagesEndpoint(endpointUrl)) {
+    outputChannel.appendLine(
+      '[generate_image] Omitting size for gpt-image-1 on OpenAI.'
+    );
+    return undefined;
+  }
+
+  if (isOpenAiImagesEndpoint(endpointUrl)) {
+    return snapOpenAiSize(model, width, height, outputChannel);
+  }
+
+  outputChannel.appendLine(
+    '[generate_image] Using initial size=auto for non-OpenAI image endpoint.'
+  );
+  return 'auto';
+}
+
+function snapOpenAiSize(
+  model: string | undefined,
+  width: number,
+  height: number,
+  outputChannel: vscode.OutputChannel
+): string {
+  const requested = `${width}x${height}`;
+  const supported = getOpenAiSizesForModel(model);
+  if (!supported) {
+    return requested;
+  }
+
+  return snapToSupportedSize(width, height, supported, outputChannel, model ?? 'OpenAI image API');
+}
+
+async function postDalleRequest(
+  generationsUrl: string,
+  headers: Record<string, string>,
+  body: Record<string, unknown>,
   signal: AbortSignal,
   outputChannel: vscode.OutputChannel
-): Promise<Uint8Array> {
-  const generationsUrl = joinEndpointUrl(config.endpointUrl, '/v1/images/generations');
-  const width = input.width ?? config.defaultWidth;
-  const height = input.height ?? config.defaultHeight;
-  const model = await resolveDalleModel(config, signal, outputChannel);
-
-  // Do NOT send response_format — many compatible servers (including LM Studio)
-  // reject unknown fields or only support the URL format by default.
-  // We handle both url and b64_json in the response below.
-  const body: Record<string, unknown> = {
-    prompt: input.prompt,
-    n: 1,
-    size: `${width}x${height}`,
-  };
-
-  if (model) {
-    body.model = model;
-  }
-
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (config.apiKey) {
-    headers['Authorization'] = `Bearer ${config.apiKey}`;
-  }
-
+): Promise<{ response: Response; rawText: string }> {
   outputChannel.appendLine(`[generate_image] POST ${generationsUrl}`);
   outputChannel.appendLine(`[generate_image] Request body: ${JSON.stringify(body)}`);
 
@@ -265,13 +361,100 @@ async function generateDalle(
 
   const rawText = await response.text();
   outputChannel.appendLine(`[generate_image] Response ${response.status}: ${rawText.slice(0, 500)}`);
+  return { response, rawText };
+}
+
+async function generateDalle(
+  input: ImageGenInput,
+  config: Config,
+  signal: AbortSignal,
+  outputChannel: vscode.OutputChannel
+): Promise<Uint8Array> {
+  const generationsUrl = joinEndpointUrl(config.endpointUrl, '/v1/images/generations');
+  // Always honor the user's configured size; ignore any width/height the model
+  // tries to pass via tool input (OpenAI image endpoints only accept a fixed set).
+  const width = config.defaultWidth;
+  const height = config.defaultHeight;
+  const model = await resolveDalleModel(config, signal, outputChannel);
+  const size = chooseInitialDalleSize(
+    config.endpointUrl,
+    model,
+    width,
+    height,
+    outputChannel
+  );
+  const initialSize = size;
+
+  // Do NOT send response_format — many compatible servers (including LM Studio)
+  // reject unknown fields or only support the URL format by default.
+  // We handle both url and b64_json in the response below.
+  const body: Record<string, unknown> = {
+    prompt: input.prompt,
+    n: 1,
+  };
+
+  if (size) {
+    body.size = size;
+  }
+
+  if (model) {
+    body.model = model;
+  }
+
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (config.apiKey) {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  }
+
+  let { response, rawText } = await postDalleRequest(
+    generationsUrl,
+    headers,
+    body,
+    signal,
+    outputChannel
+  );
+
+  if (!response.ok && isInvalidImageSizeError(rawText)) {
+    const serverSizes = parseSupportedSizes(rawText, String(body.size));
+    const supportedSizes = serverSizes.length
+      ? serverSizes
+      : getOpenAiSizesForModel(model) ?? DEFAULT_OPENAI_IMAGE_SIZES;
+    const retrySize = supportsAutoImageSize(rawText)
+      ? 'auto'
+      : snapToSupportedSize(
+          width,
+          height,
+          supportedSizes,
+          outputChannel,
+          'image API response'
+        );
+
+    if (retrySize !== String(body.size)) {
+      outputChannel.appendLine(
+        `[generate_image] Retrying after invalid size response with size=${retrySize}.`
+      );
+      body.size = retrySize;
+      ({ response, rawText } = await postDalleRequest(
+        generationsUrl,
+        headers,
+        body,
+        signal,
+        outputChannel
+      ));
+    }
+  }
 
   if (!response.ok) {
+    outputChannel.appendLine(
+      `[generate_image] Final DALL-E failure after size handling. model=${model ?? '<unspecified>'} size=${String(body.size)}`
+    );
     const availableModels =
       /"param"\s*:\s*"model"/i.test(rawText) && /"code"\s*:\s*"invalid_value"/i.test(rawText)
         ? await fetchAvailableDalleModels(config, signal, outputChannel)
         : [];
-    throw new Error(`${formatDalleError(rawText, model ?? '<unspecified>', availableModels)} (HTTP ${response.status})`);
+    throw new Error(
+      `Request meta: model=${model ?? '<unspecified>'} initialSize=${initialSize ?? '<omitted>'} finalSize=${String(body.size ?? '<omitted>')} configuredWidth=${width} configuredHeight=${height}. ${formatDalleError(rawText, model ?? '<unspecified>', availableModels)} (HTTP ${response.status})`
+    );
   }
 
   let json: unknown;
@@ -317,8 +500,8 @@ async function generateA1111(
   const body = {
     prompt: input.prompt,
     negative_prompt: input.negativePrompt ?? '',
-    width: input.width ?? config.defaultWidth,
-    height: input.height ?? config.defaultHeight,
+    width: config.defaultWidth,
+    height: config.defaultHeight,
     steps: input.steps ?? config.defaultSteps,
     sampler_name: 'DPM++ 2M Karras',
     cfg_scale: 7,
@@ -388,6 +571,10 @@ export function createImageGenTool(
     invoke: async (options, token) => {
       const config = getConfig();
       const { prompt } = options.input;
+
+      outputChannel.appendLine(
+        `[generate_image] resolved config: backend=${config.backend} model=${config.model || '<unset>'} endpoint=${config.endpointUrl} width=${config.defaultWidth} height=${config.defaultHeight}`
+      );
 
       if (!prompt?.trim()) {
         return makeResult('No prompt provided.');

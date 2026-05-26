@@ -45,6 +45,10 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
   // Reset at the start of each provideLanguageModelChatResponse call.
   private requestDedupSet = new Set<string>();
 
+  // Short-circuit image tool results only once per callId. Otherwise a stale
+  // failure can be echoed forever on later turns without a fresh tool call.
+  private shortCircuitedToolCallIds = new Set<string>();
+
   constructor(
     private client: LMStudioClient,
     private context: vscode.ExtensionContext,
@@ -160,7 +164,9 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
     // back through the LLM where it will hallucinate follow-up questions.
     const shortCircuit = this.tryShortCircuitToolResult(messages);
     if (shortCircuit) {
+      this.shortCircuitedToolCallIds.add(shortCircuit.callId);
       this.log(`Short-circuit: tool result from "${shortCircuit.toolName}"`);
+      this.log(`Short-circuit text: ${shortCircuit.text.slice(0, 500)}`);
       progress.report(new vscode.LanguageModelTextPart(shortCircuit.text));
       return;
     }
@@ -287,27 +293,34 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
    */
   private tryShortCircuitToolResult(
     messages: readonly vscode.LanguageModelChatRequestMessage[]
-  ): { toolName: string; text: string } | null {
-    // Walk backwards to find the last tool-result message
-    for (let i = messages.length - 1; i >= 0; i--) {
-      const msg = messages[i];
-      const parts = Array.isArray(msg.content) ? msg.content : [];
-
-      const toolResults = parts.filter(
-        (p): p is vscode.LanguageModelToolResultPart => p instanceof vscode.LanguageModelToolResultPart
-      );
-      if (toolResults.length === 0) continue;
-
-      // Find the tool name by matching callId against previous assistant tool-call parts
-      for (const result of toolResults) {
-        const toolName = this.resolveToolName(messages, result.callId);
-        if (toolName && LMStudioProvider.SHORT_CIRCUIT_TOOLS.has(toolName)) {
-          const text = this.extractToolResultText(result.content);
-          return { toolName, text: text || 'Done.' };
-        }
-      }
-      break; // Only check the last tool-result message
+  ): { toolName: string; text: string; callId: string } | null {
+    const lastMessage = messages.at(-1);
+    if (!lastMessage) {
+      return null;
     }
+
+    const parts = Array.isArray(lastMessage.content) ? lastMessage.content : [];
+    const toolResults = parts.filter(
+      (p): p is vscode.LanguageModelToolResultPart => p instanceof vscode.LanguageModelToolResultPart
+    );
+
+    if (toolResults.length === 0) {
+      return null;
+    }
+
+    for (const result of toolResults) {
+      const toolName = this.resolveToolName(messages, result.callId);
+      if (toolName && LMStudioProvider.SHORT_CIRCUIT_TOOLS.has(toolName)) {
+        if (this.shortCircuitedToolCallIds.has(result.callId)) {
+          this.log(`Skipping stale short-circuit for callId=${result.callId} tool=${toolName}`);
+          continue;
+        }
+
+        const text = this.extractToolResultText(result.content);
+        return { toolName, text: text || 'Done.', callId: result.callId };
+      }
+    }
+
     return null;
   }
 

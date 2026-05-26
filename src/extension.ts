@@ -17,7 +17,7 @@ export async function activate(context: vscode.ExtensionContext) {
   outputChannel = vscode.window.createOutputChannel('LM Studio Provider');
   context.subscriptions.push(outputChannel);
   
-  outputChannel.appendLine('LM Studio Copilot Provider is activating...');
+  outputChannel.appendLine(`LM Studio Copilot Provider is activating... v${context.extension.packageJSON.version}`);
   outputChannel.show(true);
 
   const client = new LMStudioClient(outputChannel);
@@ -193,7 +193,7 @@ export async function activate(context: vscode.ExtensionContext) {
     await provider?.refreshModels();
   }
 
-  outputChannel.appendLine('LM Studio Copilot Provider activated');
+  outputChannel.appendLine(`LM Studio Copilot Provider activated v${context.extension.packageJSON.version}`);
 }
 
 export function deactivate() {

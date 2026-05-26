@@ -2,7 +2,7 @@
   "name": "lmstudio-copilot-provider",
   "displayName": "LM Studio for Copilot Chat",
   "description": "Use local LM Studio models inside VS Code Copilot Chat with streaming, tool calling, and optional image generation.",
-  "version": "0.1.17",
+  "version": "0.1.27",
   "publisher": "DanLambiase",
   "license": "MIT",
   "repository": {
@@ -442,7 +442,7 @@
         "name": "lmstudio_generate_image",
         "toolReferenceName": "generateImage",
         "displayName": "Generate Image",
-        "modelDescription": "Generates an image from a text prompt using a configured image generation backend (DALL-E compatible API or Automatic1111 Stable Diffusion). Saves the image to disk and displays it inline in chat. Supports optional negative prompt, dimensions, and output path.",
+        "modelDescription": "Generates an image from a text prompt using a configured image generation backend (DALL-E compatible API or Automatic1111 Stable Diffusion). Saves the image to disk and displays it inline in chat. Supports optional negative prompt, diffusion steps, and output path.",
         "userDescription": "Generates an image from a text description.",
         "canBeReferencedInPrompt": true,
         "tags": [
@@ -462,14 +462,6 @@
             "negativePrompt": {
               "type": "string",
               "description": "Things to exclude from the image (A1111 backend only)"
-            },
-            "width": {
-              "type": "number",
-              "description": "Image width in pixels. Defaults to lmstudio-copilot.imageGenWidth setting."
-            },
-            "height": {
-              "type": "number",
-              "description": "Image height in pixels. Defaults to lmstudio-copilot.imageGenHeight setting."
             },
             "steps": {
               "type": "number",
