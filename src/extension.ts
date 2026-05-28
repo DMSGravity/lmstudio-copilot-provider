@@ -39,14 +39,17 @@ export async function activate(context: vscode.ExtensionContext) {
     return lmStudioTerminal;
   };
 
-  const startServerInTerminal = async (): Promise<boolean> => {
+  const startServerInTerminal = async (silent = false): Promise<boolean> => {
     const config = vscode.workspace.getConfiguration('lmstudio-copilot');
     const launchCommand = config.get<string>('launchCommand', '').trim();
 
     if (!launchCommand) {
       const message = 'LM Studio CLI auto-start is unavailable and no fallback launch command is configured.';
       outputChannel.appendLine(`⚠️ ${message}`);
-      vscode.window.showWarningMessage(message);
+      outputChannel.appendLine('   If LM Studio is already running, you can ignore this message.');
+      if (!silent) {
+        vscode.window.showWarningMessage(message);
+      }
       return false;
     }
 
@@ -68,7 +71,7 @@ export async function activate(context: vscode.ExtensionContext) {
     return false;
   };
 
-  const ensureServerRunning = async (): Promise<boolean> => {
+  const ensureServerRunning = async (silent = false): Promise<boolean> => {
     outputChannel.appendLine('Ensuring LM Studio server is running...');
 
     if (!client.isLocalServerUrl()) {
@@ -83,7 +86,7 @@ export async function activate(context: vscode.ExtensionContext) {
     }
 
     outputChannel.appendLine('CLI-based auto-start unavailable, trying launchCommand fallback');
-    return startServerInTerminal();
+    return startServerInTerminal(silent);
   };
 
   const stopServerTerminal = (): void => {
@@ -185,7 +188,7 @@ export async function activate(context: vscode.ExtensionContext) {
   const config = vscode.workspace.getConfiguration('lmstudio-copilot');
   if (config.get<boolean>('autoStartServer', true)) {
     outputChannel.appendLine('Auto-start server enabled, ensuring LM Studio is running...');
-    await ensureServerRunning();
+    await ensureServerRunning(true);
   }
 
   if (config.get<boolean>('autoRefreshModels', true)) {
