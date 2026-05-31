@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import * as cp from 'child_process';
+import { Logger } from '../logger';
 
 export const TERMINAL_TOOL_NAME = 'lmstudio_run_in_terminal';
 
@@ -53,7 +54,7 @@ function makeResult(text: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]);
 }
 
-export function createTerminalTool(outputChannel: vscode.OutputChannel): vscode.LanguageModelTool<TerminalToolInput> {
+export function createTerminalTool(logger: Logger): vscode.LanguageModelTool<TerminalToolInput> {
   return {
     prepareInvocation: (options) => ({
       invocationMessage: `Running: ${options.input.command}`,
@@ -79,7 +80,7 @@ export function createTerminalTool(outputChannel: vscode.OutputChannel): vscode.
       }
 
       const cwd = options.input.cwd?.trim() || getWorkspaceCwd();
-      outputChannel.appendLine(`[run_in_terminal] cwd=${cwd}  cmd=${command}`);
+      logger.verbose(`[run_in_terminal] cwd=${cwd}  cmd=${command}`);
 
       // Show the command in the named terminal so the user can follow along
       // Only reuse a terminal that is still alive (exitStatus === undefined means it hasn't exited)
@@ -90,7 +91,7 @@ export function createTerminalTool(outputChannel: vscode.OutputChannel): vscode.
 
       // Execute with real output capture
       const { stdout, stderr, exitCode } = await execAsync(command, cwd, timeoutMs);
-      outputChannel.appendLine(
+      logger.verbose(
         `[run_in_terminal] exit=${exitCode}  stdout=${stdout.length}b  stderr=${stderr.length}b`
       );
 

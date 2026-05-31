@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
+import { Logger } from './logger';
 import {
   LMStudioConfig,
   LMStudioLocalModel,
@@ -43,10 +44,10 @@ export class LMStudioClient {
   private abortControllers = new Map<string, AbortController>();
   private resolvedCliPath: string | null | undefined;
 
-  constructor(private outputChannel?: vscode.OutputChannel) {}
+  constructor(private logger: Logger) {}
 
   private log(msg: string): void {
-    this.outputChannel?.appendLine(`[Client] ${msg}`);
+    this.logger.verbose(`[Client] ${msg}`);
   }
 
   private getConfig(): LMStudioConfig {

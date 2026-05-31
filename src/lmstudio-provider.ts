@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LMStudioClient } from './lmstudio-client';
+import { Logger } from './logger';
 import { LMStudioModel, ChatMessage, ChatTool, ChatMessageContentPart } from './types';
 
 /**
@@ -52,13 +53,13 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
   constructor(
     private client: LMStudioClient,
     private context: vscode.ExtensionContext,
-    private outputChannel?: vscode.OutputChannel
+    private logger: Logger
   ) {
     this.disposables.push(this._onDidChangeLanguageModelChatInformation);
   }
 
   private log(msg: string): void {
-    this.outputChannel?.appendLine(`[Provider] ${msg}`);
+    this.logger.verbose(`[Provider] ${msg}`);
   }
 
   // ──────────────────────────────────────────────────────────────────────

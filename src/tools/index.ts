@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import { Logger } from '../logger';
 import { TERMINAL_TOOL_NAME, createTerminalTool } from './terminal-tool';
 import {
   READ_FILE_TOOL_NAME,
@@ -27,18 +28,18 @@ export {
  */
 export function registerAllTools(
   context: vscode.ExtensionContext,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): void {
   context.subscriptions.push(
-    vscode.lm.registerTool(TERMINAL_TOOL_NAME, createTerminalTool(outputChannel)),
-    vscode.lm.registerTool(READ_FILE_TOOL_NAME, createReadFileTool(outputChannel)),
-    vscode.lm.registerTool(WRITE_FILE_TOOL_NAME, createWriteFileTool(outputChannel)),
-    vscode.lm.registerTool(LIST_DIRECTORY_TOOL_NAME, createListDirectoryTool(outputChannel)),
-    vscode.lm.registerTool(SEARCH_FILES_TOOL_NAME, createSearchFilesTool(outputChannel)),
-    vscode.lm.registerTool(IMAGE_GEN_TOOL_NAME, createImageGenTool(outputChannel))
+    vscode.lm.registerTool(TERMINAL_TOOL_NAME, createTerminalTool(logger)),
+    vscode.lm.registerTool(READ_FILE_TOOL_NAME, createReadFileTool(logger)),
+    vscode.lm.registerTool(WRITE_FILE_TOOL_NAME, createWriteFileTool(logger)),
+    vscode.lm.registerTool(LIST_DIRECTORY_TOOL_NAME, createListDirectoryTool(logger)),
+    vscode.lm.registerTool(SEARCH_FILES_TOOL_NAME, createSearchFilesTool(logger)),
+    vscode.lm.registerTool(IMAGE_GEN_TOOL_NAME, createImageGenTool(logger))
   );
 
-  outputChannel.appendLine(
+  logger.info(
     `✅ Registered LM tools: ${
       [
         TERMINAL_TOOL_NAME,

@@ -7,5 +7,6 @@
     "**/dist/**": true,
     "**/assets/tmp/**": true,
     "**/*.vsix": true
-  }
+  },
+  "lmstudio-copilot.logLevel": "none"
 }

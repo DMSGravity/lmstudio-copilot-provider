@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import { LMStudioProvider } from './lmstudio-provider';
 import { LMStudioClient } from './lmstudio-client';
+import { Logger } from './logger';
 import { registerAllTools } from './tools/index';
 
 let provider: LMStudioProvider | undefined;
@@ -16,12 +17,16 @@ export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging
   outputChannel = vscode.window.createOutputChannel('LM Studio Provider');
   context.subscriptions.push(outputChannel);
-  
-  outputChannel.appendLine(`LM Studio Copilot Provider is activating... v${context.extension.packageJSON.version}`);
-  outputChannel.show(true);
 
-  const client = new LMStudioClient(outputChannel);
-  provider = new LMStudioProvider(client, context, outputChannel);
+  const logger = new Logger(outputChannel);
+
+  logger.info(`LM Studio Copilot Provider is activating... v${context.extension.packageJSON.version}`);
+  if (logger.shouldShow) {
+    outputChannel.show(true);
+  }
+
+  const client = new LMStudioClient(logger);
+  provider = new LMStudioProvider(client, context, logger);
 
   const getOrCreateTerminalByName = (terminalName: string): vscode.Terminal => {
     const existing = vscode.window.terminals.find((t) => t.name === terminalName);
@@ -45,8 +50,8 @@ export async function activate(context: vscode.ExtensionContext) {
 
     if (!launchCommand) {
       const message = 'LM Studio CLI auto-start is unavailable and no fallback launch command is configured.';
-      outputChannel.appendLine(`⚠️ ${message}`);
-      outputChannel.appendLine('   If LM Studio is already running, you can ignore this message.');
+      logger.warn(`⚠️ ${message}`);
+      logger.warn('   If LM Studio is already running, you can ignore this message.');
       if (!silent) {
         vscode.window.showWarningMessage(message);
       }
@@ -55,7 +60,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const terminal = getOrCreateServerTerminal();
     terminal.show(true);
-    outputChannel.appendLine(`Starting LM Studio server in terminal with command: ${launchCommand}`);
+    logger.info(`Starting LM Studio server in terminal with command: ${launchCommand}`);
     terminal.sendText(launchCommand, true);
 
     const startupWaitMs = config.get<number>('startupWaitMs', 3000);
@@ -63,29 +68,29 @@ export async function activate(context: vscode.ExtensionContext) {
 
     const connected = await client.checkConnection();
     if (connected) {
-      outputChannel.appendLine('✅ LM Studio server appears reachable after terminal launch');
+      logger.info('✅ LM Studio server appears reachable after terminal launch');
       return true;
     }
 
-    outputChannel.appendLine('⚠️ LM Studio server not reachable yet after terminal launch');
+    logger.warn('⚠️ LM Studio server not reachable yet after terminal launch');
     return false;
   };
 
   const ensureServerRunning = async (silent = false): Promise<boolean> => {
-    outputChannel.appendLine('Ensuring LM Studio server is running...');
+    logger.info('Ensuring LM Studio server is running...');
 
     if (!client.isLocalServerUrl()) {
-      outputChannel.appendLine('Remote server configured; skipping local CLI auto-start and terminal fallback');
+      logger.info('Remote server configured; skipping local CLI auto-start and terminal fallback');
       return await client.checkConnection();
     }
 
     const startedViaCli = await client.ensureServerRunning();
     if (startedViaCli) {
-      outputChannel.appendLine('✅ LM Studio server is reachable');
+      logger.info('✅ LM Studio server is reachable');
       return true;
     }
 
-    outputChannel.appendLine('CLI-based auto-start unavailable, trying launchCommand fallback');
+    logger.info('CLI-based auto-start unavailable, trying launchCommand fallback');
     return startServerInTerminal(silent);
   };
 
@@ -99,7 +104,7 @@ export async function activate(context: vscode.ExtensionContext) {
       return;
     }
 
-    outputChannel.appendLine(`Stopping LM Studio terminal: ${terminal.name}`);
+    logger.info(`Stopping LM Studio terminal: ${terminal.name}`);
     terminal.dispose();
     lmStudioTerminal = undefined;
     vscode.window.showInformationMessage('LM Studio terminal stopped.');
@@ -109,14 +114,14 @@ export async function activate(context: vscode.ExtensionContext) {
   try {
     registration = vscode.lm.registerLanguageModelChatProvider('lmstudio', provider);
     context.subscriptions.push(registration);
-    outputChannel.appendLine('✅ Provider registered successfully with vendor: lmstudio');
+    logger.info('✅ Provider registered successfully with vendor: lmstudio');
   } catch (error) {
-    outputChannel.appendLine(`❌ Failed to register provider: ${error}`);
+    logger.error(`❌ Failed to register provider: ${error}`);
     vscode.window.showErrorMessage(`Failed to register LM Studio provider: ${error}`);
   }
 
   // Register all LM tools (terminal, read_file, write_file, list_directory, search_files)
-  registerAllTools(context, outputChannel);
+  registerAllTools(context, logger);
 
   // Register commands
   context.subscriptions.push(
@@ -155,7 +160,7 @@ export async function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(
     vscode.commands.registerCommand('lmstudio-copilot.refreshModels', async () => {
-      outputChannel.appendLine('Refreshing models...');
+      logger.info('Refreshing models...');
       await provider?.refreshModels();
       vscode.window.showInformationMessage('LM Studio models refreshed');
     })
@@ -166,10 +171,10 @@ export async function activate(context: vscode.ExtensionContext) {
       const connected = await client.checkConnection();
       if (connected) {
         vscode.window.showInformationMessage('✅ Connected to LM Studio server');
-        outputChannel.appendLine('✅ Connection check: OK');
+        logger.info('✅ Connection check: OK');
       } else {
         vscode.window.showErrorMessage('❌ Cannot connect to LM Studio server. Make sure it is running.');
-        outputChannel.appendLine('❌ Connection check: FAILED');
+        logger.error('❌ Connection check: FAILED');
       }
     })
   );
@@ -178,7 +183,7 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('lmstudio-copilot')) {
-        outputChannel.appendLine('Configuration changed, refreshing models...');
+        logger.info('Configuration changed, refreshing models...');
         provider?.refreshModels();
       }
     })
@@ -187,16 +192,16 @@ export async function activate(context: vscode.ExtensionContext) {
   // Auto-refresh models on startup if enabled
   const config = vscode.workspace.getConfiguration('lmstudio-copilot');
   if (config.get<boolean>('autoStartServer', true)) {
-    outputChannel.appendLine('Auto-start server enabled, ensuring LM Studio is running...');
+    logger.info('Auto-start server enabled, ensuring LM Studio is running...');
     await ensureServerRunning(true);
   }
 
   if (config.get<boolean>('autoRefreshModels', true)) {
-    outputChannel.appendLine('Auto-refresh enabled, refreshing models now...');
+    logger.info('Auto-refresh enabled, refreshing models now...');
     await provider?.refreshModels();
   }
 
-  outputChannel.appendLine(`LM Studio Copilot Provider activated v${context.extension.packageJSON.version}`);
+  logger.info(`LM Studio Copilot Provider activated v${context.extension.packageJSON.version}`);
 }
 
 export function deactivate() {
