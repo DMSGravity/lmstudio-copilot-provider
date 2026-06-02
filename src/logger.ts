@@ -1,6 +1,13 @@
 import * as vscode from 'vscode';
 
 export type LogLevel = 'verbose' | 'info' | 'warning' | 'error' | 'none';
+const VALID_LOG_LEVELS: ReadonlySet<LogLevel> = new Set<LogLevel>([
+  'verbose',
+  'info',
+  'warning',
+  'error',
+  'none',
+]);
 
 const LEVEL_ORDER: Record<LogLevel, number> = {
   verbose: 0,
@@ -20,9 +27,15 @@ export class Logger {
   constructor(private channel: vscode.OutputChannel) {}
 
   private get configuredLevel(): LogLevel {
-    return vscode.workspace
+    const configuredValue = vscode.workspace
       .getConfiguration('lmstudio-copilot')
-      .get<LogLevel>('logLevel', 'verbose');
+      .get<string>('logLevel', 'verbose');
+
+    if (VALID_LOG_LEVELS.has(configuredValue as LogLevel)) {
+      return configuredValue as LogLevel;
+    }
+
+    return 'verbose';
   }
 
   private shouldLog(level: LogLevel): boolean {

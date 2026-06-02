@@ -62,6 +62,14 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
     this.logger.verbose(`[Provider] ${msg}`);
   }
 
+  private warn(msg: string): void {
+    this.logger.warn(`[Provider] ${msg}`);
+  }
+
+  private error(msg: string): void {
+    this.logger.error(`[Provider] ${msg}`);
+  }
+
   // ──────────────────────────────────────────────────────────────────────
   // Model discovery
   // ──────────────────────────────────────────────────────────────────────
@@ -261,7 +269,7 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
           try {
             parsedArgs = JSON.parse(tc.function.arguments || '{}');
           } catch (e) {
-            this.log(`Tool call "${tc.function.name}" has invalid JSON args: ${tc.function.arguments}`);
+            this.warn(`Tool call "${tc.function.name}" has invalid JSON args: ${tc.function.arguments}`);
             parsedArgs = {};
           }
 
@@ -274,7 +282,7 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
         }
       }
     } catch (error) {
-      this.log(`Streaming error: ${error}`);
+      this.error(`Streaming error: ${error}`);
       if (!token.isCancellationRequested) throw error;
     }
   }

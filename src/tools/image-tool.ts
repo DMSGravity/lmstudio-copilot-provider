@@ -614,7 +614,7 @@ export function createImageGenTool(
           imageBytes = await generateDalle(options.input, config, abortController.signal, logger);
         }
       } catch (e) {
-        logger.verbose(`[generate_image] ERROR: ${e}`);
+        logger.error(`[generate_image] ERROR: ${e}`);
         return makeResult(`Image generation failed: ${e}`);
       }
 
@@ -626,7 +626,7 @@ export function createImageGenTool(
         fs.writeFileSync(savePath, imageBytes);
         logger.verbose(`[generate_image] Saved to: ${savePath}`);
       } catch (e) {
-        logger.verbose(`[generate_image] Save failed: ${e}`);
+        logger.warn(`[generate_image] Save failed: ${e}`);
       }
 
       // Open the saved file in VS Code if saving succeeded
