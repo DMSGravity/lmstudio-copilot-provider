@@ -1,6 +1,7 @@
 import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
+import { Logger } from '../logger';
 
 export const IMAGE_GEN_TOOL_NAME = 'lmstudio_generate_image';
 
@@ -85,7 +86,7 @@ function formatDalleError(rawText: string, model: string, availableModels: strin
 async function fetchAvailableDalleModels(
   config: Config,
   signal: AbortSignal,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): Promise<string[]> {
   const modelsUrl = joinEndpointUrl(config.endpointUrl, '/v1/models');
   const headers: Record<string, string> = {};
@@ -94,7 +95,7 @@ async function fetchAvailableDalleModels(
   }
 
   try {
-    outputChannel.appendLine(`[generate_image] GET ${modelsUrl}`);
+    logger.verbose(`[generate_image] GET ${modelsUrl}`);
     const response = await fetch(modelsUrl, {
       method: 'GET',
       headers,
@@ -102,7 +103,7 @@ async function fetchAvailableDalleModels(
     });
 
     if (!response.ok) {
-      outputChannel.appendLine(
+      logger.verbose(
         `[generate_image] Model discovery failed with status ${response.status}`
       );
       return [];
@@ -116,7 +117,7 @@ async function fetchAvailableDalleModels(
       ?.map((entry) => entry.id?.trim())
       .filter((id): id is string => Boolean(id)) ?? [];
   } catch (error) {
-    outputChannel.appendLine(`[generate_image] Model discovery failed: ${error}`);
+    logger.verbose(`[generate_image] Model discovery failed: ${error}`);
     return [];
   }
 }
@@ -124,7 +125,7 @@ async function fetchAvailableDalleModels(
 async function resolveDalleModel(
   config: Config,
   signal: AbortSignal,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): Promise<string | undefined> {
   if (config.model) {
     return config.model;
@@ -134,9 +135,9 @@ async function resolveDalleModel(
     return DEFAULT_DALLE_MODEL;
   }
 
-  const availableModels = await fetchAvailableDalleModels(config, signal, outputChannel);
+  const availableModels = await fetchAvailableDalleModels(config, signal, logger);
   if (availableModels.length === 1) {
-    outputChannel.appendLine(
+    logger.verbose(
       `[generate_image] Auto-selected sole available image model: ${availableModels[0]}`
     );
     return availableModels[0];
@@ -252,7 +253,7 @@ function snapToSupportedSize(
   width: number,
   height: number,
   supported: [number, number][],
-  outputChannel: vscode.OutputChannel,
+  logger: Logger,
   label: string
 ): string {
   const requested = `${width}x${height}`;
@@ -272,7 +273,7 @@ function snapToSupportedSize(
   }
 
   const snapped = `${best[0]}x${best[1]}`;
-  outputChannel.appendLine(
+  logger.verbose(
     `[generate_image] Requested size ${requested} is not supported by ${label}; using ${snapped}.`
   );
   return snapped;
@@ -308,20 +309,20 @@ function chooseInitialDalleSize(
   model: string | undefined,
   width: number,
   height: number,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): string | undefined {
   if (model?.toLowerCase().includes('gpt-image-1') && isOpenAiImagesEndpoint(endpointUrl)) {
-    outputChannel.appendLine(
+    logger.verbose(
       '[generate_image] Omitting size for gpt-image-1 on OpenAI.'
     );
     return undefined;
   }
 
   if (isOpenAiImagesEndpoint(endpointUrl)) {
-    return snapOpenAiSize(model, width, height, outputChannel);
+    return snapOpenAiSize(model, width, height, logger);
   }
 
-  outputChannel.appendLine(
+  logger.verbose(
     '[generate_image] Using initial size=auto for non-OpenAI image endpoint.'
   );
   return 'auto';
@@ -331,7 +332,7 @@ function snapOpenAiSize(
   model: string | undefined,
   width: number,
   height: number,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): string {
   const requested = `${width}x${height}`;
   const supported = getOpenAiSizesForModel(model);
@@ -339,7 +340,7 @@ function snapOpenAiSize(
     return requested;
   }
 
-  return snapToSupportedSize(width, height, supported, outputChannel, model ?? 'OpenAI image API');
+  return snapToSupportedSize(width, height, supported, logger, model ?? 'OpenAI image API');
 }
 
 async function postDalleRequest(
@@ -347,10 +348,10 @@ async function postDalleRequest(
   headers: Record<string, string>,
   body: Record<string, unknown>,
   signal: AbortSignal,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): Promise<{ response: Response; rawText: string }> {
-  outputChannel.appendLine(`[generate_image] POST ${generationsUrl}`);
-  outputChannel.appendLine(`[generate_image] Request body: ${JSON.stringify(body)}`);
+  logger.verbose(`[generate_image] POST ${generationsUrl}`);
+  logger.verbose(`[generate_image] Request body: ${JSON.stringify(body)}`);
 
   const response = await fetch(generationsUrl, {
     method: 'POST',
@@ -360,7 +361,7 @@ async function postDalleRequest(
   });
 
   const rawText = await response.text();
-  outputChannel.appendLine(`[generate_image] Response ${response.status}: ${rawText.slice(0, 500)}`);
+  logger.verbose(`[generate_image] Response ${response.status}: ${rawText.slice(0, 500)}`);
   return { response, rawText };
 }
 
@@ -368,20 +369,20 @@ async function generateDalle(
   input: ImageGenInput,
   config: Config,
   signal: AbortSignal,
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): Promise<Uint8Array> {
   const generationsUrl = joinEndpointUrl(config.endpointUrl, '/v1/images/generations');
   // Always honor the user's configured size; ignore any width/height the model
   // tries to pass via tool input (OpenAI image endpoints only accept a fixed set).
   const width = config.defaultWidth;
   const height = config.defaultHeight;
-  const model = await resolveDalleModel(config, signal, outputChannel);
+  const model = await resolveDalleModel(config, signal, logger);
   const size = chooseInitialDalleSize(
     config.endpointUrl,
     model,
     width,
     height,
-    outputChannel
+    logger
   );
   const initialSize = size;
 
@@ -411,7 +412,7 @@ async function generateDalle(
     headers,
     body,
     signal,
-    outputChannel
+    logger
   );
 
   if (!response.ok && isInvalidImageSizeError(rawText)) {
@@ -425,12 +426,12 @@ async function generateDalle(
           width,
           height,
           supportedSizes,
-          outputChannel,
+          logger,
           'image API response'
         );
 
     if (retrySize !== String(body.size)) {
-      outputChannel.appendLine(
+      logger.verbose(
         `[generate_image] Retrying after invalid size response with size=${retrySize}.`
       );
       body.size = retrySize;
@@ -439,18 +440,18 @@ async function generateDalle(
         headers,
         body,
         signal,
-        outputChannel
+        logger
       ));
     }
   }
 
   if (!response.ok) {
-    outputChannel.appendLine(
+    logger.verbose(
       `[generate_image] Final DALL-E failure after size handling. model=${model ?? '<unspecified>'} size=${String(body.size)}`
     );
     const availableModels =
       /"param"\s*:\s*"model"/i.test(rawText) && /"code"\s*:\s*"invalid_value"/i.test(rawText)
-        ? await fetchAvailableDalleModels(config, signal, outputChannel)
+        ? await fetchAvailableDalleModels(config, signal, logger)
         : [];
     throw new Error(
       `Request meta: model=${model ?? '<unspecified>'} initialSize=${initialSize ?? '<omitted>'} finalSize=${String(body.size ?? '<omitted>')} configuredWidth=${width} configuredHeight=${height}. ${formatDalleError(rawText, model ?? '<unspecified>', availableModels)} (HTTP ${response.status})`
@@ -473,7 +474,7 @@ async function generateDalle(
   }
 
   if (first?.url) {
-    outputChannel.appendLine(`[generate_image] Fetching image from URL: ${first.url}`);
+    logger.verbose(`[generate_image] Fetching image from URL: ${first.url}`);
     const imgResponse = await fetch(first.url, { signal });
     if (!imgResponse.ok) {
       throw new Error(`Failed to fetch image from URL ${first.url}: ${imgResponse.status}`);
@@ -561,7 +562,7 @@ function resolveSavePath(input: ImageGenInput, config: Config): string {
 }
 
 export function createImageGenTool(
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): vscode.LanguageModelTool<ImageGenInput> {
   return {
     prepareInvocation: (options) => ({
@@ -572,7 +573,7 @@ export function createImageGenTool(
       const config = getConfig();
       const { prompt } = options.input;
 
-      outputChannel.appendLine(
+      logger.verbose(
         `[generate_image] resolved config: backend=${config.backend} model=${config.model || '<unset>'} endpoint=${config.endpointUrl} width=${config.defaultWidth} height=${config.defaultHeight}`
       );
 
@@ -590,15 +591,15 @@ export function createImageGenTool(
       const endpointIsEmpty = !config.endpointUrl.trim();
       const urlLower = config.endpointUrl.toLowerCase();
       const isLmStudioUrl = LMSTUDIO_HOSTS.some((h) => urlLower.includes(h));
-      outputChannel.appendLine(
+      logger.verbose(
         `[generate_image] config: backend="${config.backend}" endpointUrl="${config.endpointUrl}" empty=${endpointIsEmpty} isLmStudio=${isLmStudioUrl}`
       );
       if (endpointIsEmpty || isLmStudioUrl) {
-        outputChannel.appendLine('[generate_image] No valid image gen endpoint configured — returning setup help');
+        logger.verbose('[generate_image] No valid image gen endpoint configured — returning setup help');
         return makeResult(SETUP_HELP);
       }
 
-      outputChannel.appendLine(
+      logger.verbose(
         `[generate_image] backend=${config.backend} prompt="${prompt.slice(0, 100)}"`
       );
 
@@ -610,22 +611,22 @@ export function createImageGenTool(
         if (config.backend === 'a1111') {
           imageBytes = await generateA1111(options.input, config, abortController.signal);
         } else {
-          imageBytes = await generateDalle(options.input, config, abortController.signal, outputChannel);
+          imageBytes = await generateDalle(options.input, config, abortController.signal, logger);
         }
       } catch (e) {
-        outputChannel.appendLine(`[generate_image] ERROR: ${e}`);
+        logger.error(`[generate_image] ERROR: ${e}`);
         return makeResult(`Image generation failed: ${e}`);
       }
 
-      outputChannel.appendLine(`[generate_image] Generated ${imageBytes.length} bytes`);
+      logger.verbose(`[generate_image] Generated ${imageBytes.length} bytes`);
 
       // Save to disk
       const savePath = resolveSavePath(options.input, config);
       try {
         fs.writeFileSync(savePath, imageBytes);
-        outputChannel.appendLine(`[generate_image] Saved to: ${savePath}`);
+        logger.verbose(`[generate_image] Saved to: ${savePath}`);
       } catch (e) {
-        outputChannel.appendLine(`[generate_image] Save failed: ${e}`);
+        logger.warn(`[generate_image] Save failed: ${e}`);
       }
 
       // Open the saved file in VS Code if saving succeeded

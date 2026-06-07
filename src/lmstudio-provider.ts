@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { LMStudioClient } from './lmstudio-client';
+import { Logger } from './logger';
 import { LMStudioModel, ChatMessage, ChatTool, ChatMessageContentPart } from './types';
 
 /**
@@ -52,13 +53,21 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
   constructor(
     private client: LMStudioClient,
     private context: vscode.ExtensionContext,
-    private outputChannel?: vscode.OutputChannel
+    private logger: Logger
   ) {
     this.disposables.push(this._onDidChangeLanguageModelChatInformation);
   }
 
   private log(msg: string): void {
-    this.outputChannel?.appendLine(`[Provider] ${msg}`);
+    this.logger.verbose(`[Provider] ${msg}`);
+  }
+
+  private warn(msg: string): void {
+    this.logger.warn(`[Provider] ${msg}`);
+  }
+
+  private error(msg: string): void {
+    this.logger.error(`[Provider] ${msg}`);
   }
 
   // ──────────────────────────────────────────────────────────────────────
@@ -260,7 +269,7 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
           try {
             parsedArgs = JSON.parse(tc.function.arguments || '{}');
           } catch (e) {
-            this.log(`Tool call "${tc.function.name}" has invalid JSON args: ${tc.function.arguments}`);
+            this.warn(`Tool call "${tc.function.name}" has invalid JSON args: ${tc.function.arguments}`);
             parsedArgs = {};
           }
 
@@ -273,7 +282,7 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
         }
       }
     } catch (error) {
-      this.log(`Streaming error: ${error}`);
+      this.error(`Streaming error: ${error}`);
       if (!token.isCancellationRequested) throw error;
     }
   }

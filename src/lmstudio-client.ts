@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as cp from 'child_process';
 import * as os from 'os';
 import * as path from 'path';
+import { Logger } from './logger';
 import {
   LMStudioConfig,
   LMStudioLocalModel,
@@ -43,10 +44,18 @@ export class LMStudioClient {
   private abortControllers = new Map<string, AbortController>();
   private resolvedCliPath: string | null | undefined;
 
-  constructor(private outputChannel?: vscode.OutputChannel) {}
+  constructor(private logger: Logger) {}
 
   private log(msg: string): void {
-    this.outputChannel?.appendLine(`[Client] ${msg}`);
+    this.logger.verbose(`[Client] ${msg}`);
+  }
+
+  private warn(msg: string): void {
+    this.logger.warn(`[Client] ${msg}`);
+  }
+
+  private error(msg: string): void {
+    this.logger.error(`[Client] ${msg}`);
   }
 
   private getConfig(): LMStudioConfig {
@@ -134,7 +143,7 @@ export class LMStudioClient {
     this.log(`CLI: ${cliPath} ${args.join(' ')}`);
     const result = await this.execFileAsync(cliPath, args, timeoutMs);
     if (result.exitCode !== 0) {
-      this.log(`CLI command failed (${result.exitCode}): ${result.stderr || result.stdout}`);
+      this.error(`CLI command failed (${result.exitCode}): ${result.stderr || result.stdout}`);
     }
     return result;
   }
@@ -153,7 +162,7 @@ export class LMStudioClient {
     try {
       return JSON.parse(text) as T;
     } catch (error) {
-      this.log(`Failed to parse CLI JSON for "${args.join(' ')}": ${error}`);
+      this.warn(`Failed to parse CLI JSON for "${args.join(' ')}": ${error}`);
       return null;
     }
   }
@@ -173,7 +182,7 @@ export class LMStudioClient {
       this.log(`Spawned detached CLI process: ${cliPath} ${args.join(' ')}`);
       return true;
     } catch (error) {
-      this.log(`Failed to spawn detached CLI process: ${error}`);
+      this.error(`Failed to spawn detached CLI process: ${error}`);
       return false;
     }
   }
@@ -182,7 +191,7 @@ export class LMStudioClient {
     try {
       return new URL(this.getConfig().serverUrl);
     } catch (error) {
-      this.log(`Invalid server URL: ${error}`);
+      this.error(`Invalid server URL: ${error}`);
       return null;
     }
   }
@@ -251,7 +260,7 @@ export class LMStudioClient {
       this.log(`Connection check: ${r.status}`);
       return r.ok;
     } catch (e) {
-      this.log(`Connection check failed: ${e}`);
+      this.error(`Connection check failed: ${e}`);
       return false;
     }
   }
@@ -295,7 +304,7 @@ export class LMStudioClient {
       this.log(`Found ${models.length} models: ${models.map(m => m.id).join(', ')}`);
       return models;
     } catch (e) {
-      this.log(`Error fetching models: ${e}`);
+      this.error(`Error fetching models: ${e}`);
       return [];
     }
   }
@@ -404,7 +413,7 @@ export class LMStudioClient {
     if (!this.isLocalServerUrl()) {
       const serverReady = await this.checkConnection();
       if (!serverReady) {
-        this.log(`Cannot load model ${modelId} because the LM Studio server is unavailable`);
+        this.error(`Cannot load model ${modelId} because the LM Studio server is unavailable`);
         return false;
       }
 
@@ -413,7 +422,7 @@ export class LMStudioClient {
 
     const serverReady = await this.ensureServerRunning();
     if (!serverReady) {
-      this.log(`Cannot load model ${modelId} because the LM Studio server is unavailable`);
+      this.error(`Cannot load model ${modelId} because the LM Studio server is unavailable`);
       return false;
     }
 

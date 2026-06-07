@@ -2,7 +2,7 @@
   "name": "lmstudio-copilot-provider",
   "displayName": "LM Studio for Copilot Chat",
   "description": "Use local LM Studio models inside VS Code Copilot Chat with streaming, tool calling, and optional image generation.",
-  "version": "0.1.27",
+  "version": "0.1.28-JG",
   "publisher": "DanLambiase",
   "license": "MIT",
   "repository": {
@@ -40,6 +40,20 @@
         "title": "LM Studio",
         "order": 1,
         "properties": {
+          "lmstudio-copilot.logLevel": {
+            "type": "string",
+            "enum": ["verbose", "info", "warning", "error", "none"],
+            "enumDescriptions": [
+              "All messages including detailed diagnostics",
+              "State changes, model discovery, and important events",
+              "Warnings and errors only",
+              "Errors only",
+              "No Output Channel logging"
+            ],
+            "default": "verbose",
+            "order": 0,
+            "description": "Controls how much diagnostic information is written to the LM Studio output channel"
+          },
           "lmstudio-copilot.serverUrl": {
             "type": "string",
             "default": "http://localhost:1234",

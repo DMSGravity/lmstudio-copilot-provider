@@ -67,6 +67,7 @@ Most users can leave the defaults alone. These are the settings that matter most
 - `lmstudio-copilot.maxTools`: Limit the number of tools exposed per request
 - `lmstudio-copilot.imageGenEndpointUrl`: Base URL for DALL-E/OpenAI-compatible or A1111 image generation
 - `lmstudio-copilot.imageGenApiKey`: Dedicated API key for image generation backends such as OpenAI DALL-E
+- `lmstudio-copilot.logLevel`: Controls output logging verbosity. Default is `verbose`; set to `info`, `warning`, `error`, or `none`.
 
 ## Commands
 

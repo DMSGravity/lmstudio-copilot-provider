@@ -5,7 +5,6 @@ dist/
 .vscode-test/
 .snapshots/
 .env
-
-
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
+.vscode/settings.json

@@ -2,6 +2,7 @@ import * as vscode from 'vscode';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as cp from 'child_process';
+import { Logger } from '../logger';
 
 // ─── helpers ──────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ interface ReadFileInput {
 }
 
 export function createReadFileTool(
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): vscode.LanguageModelTool<ReadFileInput> {
   return {
     prepareInvocation: (options) => ({
@@ -59,7 +60,7 @@ export function createReadFileTool(
 
     invoke: async (options) => {
       const resolved = resolvePath(options.input.path);
-      outputChannel.appendLine(`[read_file] ${resolved}`);
+      logger.verbose(`[read_file] ${resolved}`);
 
       if (!fs.existsSync(resolved)) {
         return makeResult(`File not found: ${resolved}`);
@@ -103,7 +104,7 @@ interface WriteFileInput {
 }
 
 export function createWriteFileTool(
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): vscode.LanguageModelTool<WriteFileInput> {
   return {
     prepareInvocation: (options) => ({
@@ -112,7 +113,7 @@ export function createWriteFileTool(
 
     invoke: async (options) => {
       const resolved = resolvePath(options.input.path);
-      outputChannel.appendLine(`[write_file] ${resolved}`);
+      logger.verbose(`[write_file] ${resolved}`);
 
       try {
         if (options.input.createDirectories !== false) {
@@ -201,7 +202,7 @@ function listDir(
 }
 
 export function createListDirectoryTool(
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): vscode.LanguageModelTool<ListDirectoryInput> {
   return {
     prepareInvocation: (options) => ({
@@ -210,7 +211,7 @@ export function createListDirectoryTool(
 
     invoke: async (options) => {
       const dirPath = resolvePath(options.input.path ?? '.');
-      outputChannel.appendLine(`[list_directory] ${dirPath}`);
+      logger.verbose(`[list_directory] ${dirPath}`);
 
       if (!fs.existsSync(dirPath)) {
         return makeResult(`Directory not found: ${dirPath}`);
@@ -412,7 +413,7 @@ async function searchManually(
 }
 
 export function createSearchFilesTool(
-  outputChannel: vscode.OutputChannel
+  logger: Logger
 ): vscode.LanguageModelTool<SearchFilesInput> {
   return {
     prepareInvocation: (options) => ({
@@ -431,7 +432,7 @@ export function createSearchFilesTool(
       const isRegex = options.input.isRegex ?? false;
       const caseSensitive = options.input.caseSensitive ?? false;
 
-      outputChannel.appendLine(
+      logger.verbose(
         `[search_files] pattern="${pattern}" regex=${isRegex} case=${caseSensitive} max=${maxResults}`
       );
 
