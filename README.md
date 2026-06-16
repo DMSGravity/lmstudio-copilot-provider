@@ -41,6 +41,18 @@ You can connect to an LM Studio server running on a remote machine:
 
 This is useful for setups where LM Studio runs on a dedicated server or in a container.
 
+### SSH tunnelling ("looks-local" remote server)
+
+If you tunnel a remote LM Studio over SSH, its URL on your local machine is still `http://localhost:1234`. The extension would normally treat this as a local installation and attempt CLI operations, which will fail because LM Studio is not actually installed locally.
+
+Enable **Treat As Remote** to prevent this:
+
+```json
+"lmstudio-copilot.treatAsRemote": true
+```
+
+With this option enabled the extension skips all local CLI operations (auto-start, `lms ls` model discovery, `lms server stop`) regardless of how the server URL looks.
+
 ## About The CLI
 
 You do not need to install the LM Studio CLI separately.
@@ -60,6 +72,7 @@ For most users, nothing needs to be configured here. CLI features are skipped wh
 Most users can leave the defaults alone. These are the settings that matter most:
 
 - `lmstudio-copilot.serverUrl`: LM Studio server URL (default: `http://localhost:1234`)
+- `lmstudio-copilot.treatAsRemote`: Always treat the server as remote — disables all local CLI operations. Enable this when you tunnel a remote LM Studio over SSH so its URL looks like `localhost`.
 - `lmstudio-copilot.cliPath`: Override the LM Studio CLI path if auto-detection does not find it
 - `lmstudio-copilot.autoStartServer`: Start LM Studio automatically when the extension activates
 - `lmstudio-copilot.launchCommand`: Fallback terminal command if CLI-based startup is unavailable
