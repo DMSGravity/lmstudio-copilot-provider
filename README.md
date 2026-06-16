@@ -53,6 +53,33 @@ Enable **Treat As Remote** to prevent this:
 
 With this option enabled the extension skips all local CLI operations (auto-start, `lms ls` model discovery, `lms server stop`) regardless of how the server URL looks.
 
+### Manual provider JSON fallback
+
+If the VS Code GUI for adding a custom chat model is bugged, you can fall back to a manual provider definition and paste a model entry like this:
+
+```json
+{
+  "name": "LM Studio",
+  "vendor": "customendpoint",
+  "apiKey": "lm-studio",
+  "apiType": "chat-completions",
+  "models": [
+    {
+      "id": "qwen/qwen3.6-27b",
+      "name": "qwen/qwen3.6-27b",
+      "url": "http://YOUR_TAILSCALE_IP:1234/v1/chat/completions",
+      "toolCalling": true,
+      "vision": false,
+      "maxInputTokens": 80000,
+      "maxOutputTokens": 16000,
+      "streaming": true
+    }
+  ]
+}
+```
+
+Replace the model `id`, display `name`, and `url` with the values exposed by your LM Studio server. Set `toolCalling` and `vision` to match the capabilities of the model you are exposing.
+
 ## About The CLI
 
 You do not need to install the LM Studio CLI separately.
