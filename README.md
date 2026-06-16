@@ -104,10 +104,10 @@ Use these settings for OpenAI image generation:
 
 ```json
 {
-	"lmstudio-copilot.imageGenBackend": "dalle",
-	"lmstudio-copilot.imageGenEndpointUrl": "https://api.openai.com",
-	"lmstudio-copilot.imageGenApiKey": "sk-...",
-	"lmstudio-copilot.imageGenModel": "dall-e-3"
+ "lmstudio-copilot.imageGenBackend": "dalle",
+ "lmstudio-copilot.imageGenEndpointUrl": "https://api.openai.com",
+ "lmstudio-copilot.imageGenApiKey": "sk-...",
+ "lmstudio-copilot.imageGenModel": "dall-e-3"
 }
 ```
 
