@@ -55,7 +55,7 @@ If the VS Code GUI for adding a custom chat model is bugged, you can fall back t
     {
       "id": "qwen/qwen3.6-27b",
       "name": "qwen/qwen3.6-27b",
-      "url": "http://Tailscale_IP:1234/v1/chat/completions",
+      "url": "http://YOUR_TAILSCALE_IP:1234/v1/chat/completions",
       "toolCalling": true,
       "vision": false,
       "maxInputTokens": 80000,
