@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.18] - 2026-06-16
+
+### Change 18
+
+- Add `lmstudio-copilot.treatAsRemote` setting. When enabled, the extension skips all local CLI operations (auto-start, `lms ls` model discovery, `lms server stop`) regardless of the server URL. This is useful when tunnelling a remote LM Studio over SSH, where the URL appears as `localhost` but should not trigger local-only commands.
+
 ## [0.1.17] - 2026-05-19
 
 ### Change 17

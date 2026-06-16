@@ -109,6 +109,12 @@
             "default": 3000,
             "order": 9,
             "description": "Milliseconds to wait before checking LM Studio connection after server start"
+          },
+          "lmstudio-copilot.treatAsRemote": {
+            "type": "boolean",
+            "default": false,
+            "order": 10,
+            "markdownDescription": "Always treat the configured server as a **remote** server — disables all local CLI operations (auto-start, model discovery via `lms`, server stop). Enable this when you tunnel a remote LM Studio over SSH so its URL looks like `localhost` but should not trigger local CLI commands."
           }
         }
       },

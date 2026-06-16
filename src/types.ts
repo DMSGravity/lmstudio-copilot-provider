@@ -7,6 +7,7 @@ export interface LMStudioConfig {
   serverUrl: string;
   apiKey: string;
   requestTimeout: number;
+  treatAsRemote: boolean;
 }
 
 /**
@@ -195,5 +196,6 @@ export function getConfig(): LMStudioConfig {
     serverUrl: config.get<string>('serverUrl', 'http://localhost:1234'),
     apiKey: config.get<string>('apiKey', ''),
     requestTimeout: config.get<number>('requestTimeout', 60000),
+    treatAsRemote: config.get<boolean>('treatAsRemote', false),
   };
 }
