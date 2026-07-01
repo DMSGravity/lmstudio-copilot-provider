@@ -52,6 +52,7 @@ Enable **Treat As Remote** to prevent this:
 ```
 
 With this option enabled the extension skips all local CLI operations (auto-start, `lms ls` model discovery, `lms server stop`) regardless of how the server URL looks.
+
 ### Manual provider JSON fallback
 
 If the VS Code GUI for adding a custom chat model is bugged, you can fall back to a manual provider definition and paste a model entry like this:
