@@ -460,6 +460,34 @@
         }
       },
       {
+        "name": "lmstudio_get_codebase_index",
+        "toolReferenceName": "getCodebaseIndex",
+        "displayName": "Get Codebase Index",
+        "modelDescription": "Walks the entire workspace and returns a structured index of all source files with their paths, sizes, and exported/declared symbols (functions, classes, constants, etc.). Use this to understand the overall codebase layout before reading individual files, or when the user asks about the project structure.",
+        "userDescription": "Builds a structural index of the workspace, listing every file and its top-level declarations.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "codebase",
+          "index",
+          "symbols",
+          "workspace",
+          "structure"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "includeSymbols": {
+              "type": "boolean",
+              "description": "Extract top-level symbol names (exported functions, classes, constants, etc.) from each code file. Defaults to true."
+            },
+            "maxFileSizeKB": {
+              "type": "number",
+              "description": "Maximum file size in KB to process for symbol extraction. Files larger than this limit are still listed but their symbols are not extracted. Defaults to 128, capped at 512."
+            }
+          }
+        }
+      },
+      {
         "name": "lmstudio_generate_image",
         "toolReferenceName": "generateImage",
         "displayName": "Generate Image",

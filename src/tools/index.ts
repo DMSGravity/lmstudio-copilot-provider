@@ -12,6 +12,7 @@ import {
   createSearchFilesTool,
 } from './file-tools';
 import { IMAGE_GEN_TOOL_NAME, createImageGenTool } from './image-tool';
+import { CODEBASE_INDEX_TOOL_NAME, createCodebaseIndexTool } from './codebase-index-tool';
 
 export {
   TERMINAL_TOOL_NAME,
@@ -20,6 +21,7 @@ export {
   LIST_DIRECTORY_TOOL_NAME,
   SEARCH_FILES_TOOL_NAME,
   IMAGE_GEN_TOOL_NAME,
+  CODEBASE_INDEX_TOOL_NAME,
 };
 
 /**
@@ -36,7 +38,8 @@ export function registerAllTools(
     vscode.lm.registerTool(WRITE_FILE_TOOL_NAME, createWriteFileTool(logger)),
     vscode.lm.registerTool(LIST_DIRECTORY_TOOL_NAME, createListDirectoryTool(logger)),
     vscode.lm.registerTool(SEARCH_FILES_TOOL_NAME, createSearchFilesTool(logger)),
-    vscode.lm.registerTool(IMAGE_GEN_TOOL_NAME, createImageGenTool(logger))
+    vscode.lm.registerTool(IMAGE_GEN_TOOL_NAME, createImageGenTool(logger)),
+    vscode.lm.registerTool(CODEBASE_INDEX_TOOL_NAME, createCodebaseIndexTool(logger))
   );
 
   logger.info(
@@ -48,6 +51,7 @@ export function registerAllTools(
         LIST_DIRECTORY_TOOL_NAME,
         SEARCH_FILES_TOOL_NAME,
         IMAGE_GEN_TOOL_NAME,
+        CODEBASE_INDEX_TOOL_NAME,
       ].join(', ')
     }`
   );
