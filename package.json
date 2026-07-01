@@ -1,8 +1,9 @@
 {
+  "$schema": "https://json.schemastore.org/package.json",
   "name": "lmstudio-copilot-provider",
   "displayName": "LM Studio for Copilot Chat",
   "description": "Use local LM Studio models inside VS Code Copilot Chat with streaming, tool calling, and optional image generation.",
-  "version": "0.1.28-JG",
+  "version": "0.1.29",
   "publisher": "DanLambiase",
   "license": "MIT",
   "repository": {
@@ -109,6 +110,12 @@
             "default": 3000,
             "order": 9,
             "description": "Milliseconds to wait before checking LM Studio connection after server start"
+          },
+          "lmstudio-copilot.treatAsRemote": {
+            "type": "boolean",
+            "default": false,
+            "order": 10,
+            "markdownDescription": "Always treat the configured server as a **remote** server — disables all local CLI operations (auto-start, model discovery via `lms`, server stop). Enable this when you tunnel a remote LM Studio over SSH so its URL looks like `localhost` but should not trigger local CLI commands."
           }
         }
       },
@@ -450,6 +457,34 @@
           "required": [
             "pattern"
           ]
+        }
+      },
+      {
+        "name": "lmstudio_get_codebase_index",
+        "toolReferenceName": "getCodebaseIndex",
+        "displayName": "Get Codebase Index",
+        "modelDescription": "Walks the entire workspace and returns a structured index of all source files with their paths, sizes, and exported/declared symbols (functions, classes, constants, etc.). Use this to understand the overall codebase layout before reading individual files, or when the user asks about the project structure.",
+        "userDescription": "Builds a structural index of the workspace, listing every file and its top-level declarations.",
+        "canBeReferencedInPrompt": true,
+        "tags": [
+          "codebase",
+          "index",
+          "symbols",
+          "workspace",
+          "structure"
+        ],
+        "inputSchema": {
+          "type": "object",
+          "properties": {
+            "includeSymbols": {
+              "type": "boolean",
+              "description": "Extract top-level symbol names (exported functions, classes, constants, etc.) from each code file. Defaults to true."
+            },
+            "maxFileSizeKB": {
+              "type": "number",
+              "description": "Maximum file size in KB to process for symbol extraction. Files larger than this limit are still listed but their symbols are not extracted. Defaults to 128, capped at 512."
+            }
+          }
         }
       },
       {

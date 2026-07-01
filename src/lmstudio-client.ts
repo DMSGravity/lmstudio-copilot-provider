@@ -197,6 +197,10 @@ export class LMStudioClient {
   }
 
   public isLocalServerUrl(): boolean {
+    if (this.getConfig().treatAsRemote) {
+      return false;
+    }
+
     const url = this.parseServerUrl();
     if (!url) {
       return false;
