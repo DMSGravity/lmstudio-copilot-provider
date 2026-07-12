@@ -13,6 +13,51 @@ function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+interface SettingInspection {
+  globalValue?: unknown;
+  workspaceValue?: unknown;
+  workspaceFolderValue?: unknown;
+}
+
+function hasExplicitSetting(inspection: SettingInspection | undefined): boolean {
+  if (!inspection) {
+    return false;
+  }
+
+  return inspection.globalValue !== undefined
+    || inspection.workspaceValue !== undefined
+    || inspection.workspaceFolderValue !== undefined;
+}
+
+async function applyByokUtilityModelAutoFix(logger: Logger): Promise<void> {
+  const extensionConfig = vscode.workspace.getConfiguration('lmstudio-copilot');
+  const enabled = extensionConfig.get<boolean>('autoFixByokUtilityModel', true);
+
+  if (!enabled) {
+    logger.info('BYOK utility model auto-fix disabled by user setting.');
+    return;
+  }
+
+  const config = vscode.workspace.getConfiguration();
+  const byokDefaultInspection = config.inspect<string>('chat.byokUtilityModelDefault');
+  const utilityModelInspection = config.inspect<string>('chat.utilityModel');
+  const utilitySmallModelInspection = config.inspect<string>('chat.utilitySmallModel');
+
+  // Respect explicit user/workspace choices. Only patch when all three are untouched.
+  if (hasExplicitSetting(byokDefaultInspection)
+    || hasExplicitSetting(utilityModelInspection)
+    || hasExplicitSetting(utilitySmallModelInspection)) {
+    logger.info('Skipping BYOK utility model auto-fix because chat utility settings are already explicitly configured.');
+    return;
+  }
+
+  await config.update('chat.byokUtilityModelDefault', 'mainAgent', vscode.ConfigurationTarget.Global);
+  await config.update('chat.utilityModel', '', vscode.ConfigurationTarget.Global);
+  await config.update('chat.utilitySmallModel', '', vscode.ConfigurationTarget.Global);
+
+  logger.info('Applied BYOK utility model auto-fix: chat.byokUtilityModelDefault=mainAgent, chat.utilityModel="", chat.utilitySmallModel="".');
+}
+
 export async function activate(context: vscode.ExtensionContext) {
   // Create output channel for logging
   outputChannel = vscode.window.createOutputChannel('LM Studio Provider');
@@ -24,6 +69,8 @@ export async function activate(context: vscode.ExtensionContext) {
   if (logger.shouldShow) {
     outputChannel.show(true);
   }
+
+  await applyByokUtilityModelAutoFix(logger);
 
   const client = new LMStudioClient(logger);
   provider = new LMStudioProvider(client, context, logger);

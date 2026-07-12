@@ -116,6 +116,12 @@
             "default": false,
             "order": 10,
             "markdownDescription": "Always treat the configured server as a **remote** server — disables all local CLI operations (auto-start, model discovery via `lms`, server stop). Enable this when you tunnel a remote LM Studio over SSH so its URL looks like `localhost` but should not trigger local CLI commands."
+          },
+          "lmstudio-copilot.autoFixByokUtilityModel": {
+            "type": "boolean",
+            "default": true,
+            "order": 11,
+            "description": "Automatically configure VS Code chat utility model defaults for BYOK compatibility when utility settings are not explicitly set. Prevents 'copilot-utility-small' configuration errors."
           }
         }
       },
@@ -195,6 +201,12 @@
             "default": "default",
             "order": 10,
             "description": "Reasoning effort level sent to models that support the reasoning_effort parameter (e.g. o1, o3, QwQ). Has no effect on models that do not support the parameter."
+          },
+          "lmstudio-copilot.gemmaChannelThinkingTransform": {
+            "type": "boolean",
+            "default": true,
+            "order": 11,
+            "description": "For Gemma-family models, transform channel-style thinking output so hidden reasoning is not shown in chat responses."
           }
         }
       },

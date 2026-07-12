@@ -124,7 +124,7 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
     this.log(`provideLanguageModelChatInformation: ${this.availableModels.length} models`);
 
     const config = vscode.workspace.getConfiguration('lmstudio-copilot');
-    const maxInputTokens = config.get<number>('maxInputTokens', 131072);
+    const configuredMaxInputTokens = config.get<number>('maxInputTokens', 131072);
     const maxOutputTokens = config.get<number>('maxOutputTokens', 32663);
     const enableToolCalling = config.get<boolean>('enableToolCalling', true);
 
@@ -133,7 +133,10 @@ export class LMStudioProvider implements vscode.LanguageModelChatProvider<LMStud
       name: this.getDisplayName(model),
       family: 'lmstudio',
       version: '1.0.0',
-      maxInputTokens: model.max_context_length || maxInputTokens,
+      // Honor the configured input-token cap while never exceeding model limits.
+      maxInputTokens: model.max_context_length
+        ? Math.min(configuredMaxInputTokens, model.max_context_length)
+        : configuredMaxInputTokens,
       maxOutputTokens,
       lmstudioModelId: model.id,
       isLoaded: Boolean(model.loaded),

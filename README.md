@@ -151,11 +151,53 @@ For other OpenAI-compatible image servers, do not assume `dall-e-3` exists. Set 
 - Run `LM Studio: Check Server Connection`
 - If LM Studio is installed in a non-standard location, set `lmstudio-copilot.cliPath`
 
+### BYOK utility model error
+
+If you see this Copilot error:
+
+`No utility model is configured for 'copilot-utility-small' while the selected main agent model is BYOK.`
+
+the extension now auto-fixes this on startup by setting compatible defaults when the chat utility model settings are not already explicitly configured.
+
+To disable auto-fix behavior:
+
+```json
+{
+  "lmstudio-copilot.autoFixByokUtilityModel": false
+}
+```
+
+Manual fallback (if you prefer explicit chat settings):
+
+```json
+{
+  "chat.byokUtilityModelDefault": "mainAgent",
+  "chat.utilityModel": "",
+  "chat.utilitySmallModel": ""
+}
+```
+
+Then run **Developer: Reload Window**.
+
 ### Slow responses
 
 - LM Studio performance depends on your hardware and the model size
 - Consider using a smaller/faster model
 - Increase the timeout in settings if needed
+
+### Gemma reasoning text appears in chat
+
+Some Gemma-family models may stream channel-style thinking markers instead of standard OpenAI-style hidden reasoning.
+
+This extension automatically transforms Gemma channel-thinking output by default.
+
+If needed, you can toggle this behavior:
+
+```json
+{
+  "lmstudio-copilot.gemmaChannelThinkingTransform": true
+}
+```
 
 ## Development
 

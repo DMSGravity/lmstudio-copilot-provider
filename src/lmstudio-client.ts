@@ -25,6 +25,16 @@ export type StreamPart =
   | { text: string }
   | { toolCall: ToolCall };
 
+interface ThinkState {
+  tag: string | null;
+  pending: string;
+}
+
+interface GemmaChannelState {
+  insideThought: boolean;
+  pending: string;
+}
+
 // XML tool-call pattern: <tool_call>{"name":"fn","arguments":{…}}</tool_call>
 const XML_TOOL_CALL_RE = /<tool_call>\s*([\s\S]*?)\s*<\/tool_call>/g;
 
@@ -503,7 +513,13 @@ export class LMStudioClient {
       if (!resp.ok) throw new Error(`LM Studio API error: ${resp.status} - ${await resp.text()}`);
       if (!resp.body) throw new Error('No response body');
 
-      yield* this.processSSEStream(resp.body);
+      const gemmaChannelTransformEnabled = clientConfig.get<boolean>('gemmaChannelThinkingTransform', true)
+        && /gemma/i.test(modelId);
+      if (gemmaChannelTransformEnabled) {
+        this.log(`Gemma channel-thinking transform enabled for model: ${modelId}`);
+      }
+
+      yield* this.processSSEStream(resp.body, gemmaChannelTransformEnabled);
     } finally {
       if (requestId) this.abortControllers.delete(requestId);
     }
@@ -532,13 +548,15 @@ export class LMStudioClient {
 
   private async *processSSEStream(
     body: ReadableStream<Uint8Array>,
+    gemmaChannelTransformEnabled = false,
   ): AsyncGenerator<StreamPart, void, unknown> {
     const reader = body.getReader();
     const decoder = new TextDecoder();
     let sseBuffer = '';
 
     // State
-    let insideThink = false;
+    const thinkState: ThinkState = { tag: null, pending: '' };
+    const gemmaChannelState: GemmaChannelState = { insideThought: false, pending: '' };
     let holdBuffer = '';          // text held while waiting for </tool_call>
     let toolCallYielded = false;  // tracks whether ANY tool call was emitted this turn
 
@@ -605,8 +623,10 @@ export class LMStudioClient {
           const rawContent = choice.delta?.content;
           if (!rawContent) continue;
 
-          const text = this.filterText(rawContent, insideThink);
-          insideThink = this.computeThinkState(rawContent, insideThink);
+          let text = this.filterText(rawContent, thinkState);
+          if (gemmaChannelTransformEnabled) {
+            text = this.filterGemmaChannelContent(text, gemmaChannelState);
+          }
           if (!text) continue;
 
           // Always accumulate into holdBuffer so we can detect tool calls
@@ -678,47 +698,131 @@ export class LMStudioClient {
 
   // ── Text filtering ────────────────────────────────────────────────────
 
-  /** Strip <think>…</think> and special tokens from a chunk. */
-  private filterText(raw: string, insideThink: boolean): string {
+  /**
+   * Strip reasoning tags from streamed text with cross-chunk state.
+   * Supports <think>, <thinking>, <reasoning>, and <reflection> blocks.
+   */
+  private filterText(raw: string, state: ThinkState): string {
+    const tags = ['think', 'thinking', 'reasoning', 'reflection'];
+    let buf = state.pending + raw;
+    state.pending = '';
+
     let out = '';
     let i = 0;
-    let inside = insideThink;
-    while (i < raw.length) {
-      if (inside) {
-        const close = raw.indexOf('</think>', i);
-        if (close === -1) break;
-        i = close + '</think>'.length;
-        if (raw[i] === '\n') i++;
-        inside = false;
-      } else {
-        const open = raw.indexOf('<think>', i);
-        if (open === -1) { out += raw.slice(i); break; }
-        out += raw.slice(i, open);
-        i = open + '<think>'.length;
-        inside = true;
+
+    while (i < buf.length) {
+      if (state.tag) {
+        const closeTag = `</${state.tag}>`;
+        const close = buf.indexOf(closeTag, i);
+        if (close === -1) {
+          const keep = Math.max(closeTag.length - 1, 0);
+          state.pending = buf.slice(Math.max(i, buf.length - keep));
+          return out.replace(/<\|(startofstream|endofstream|im_start|im_end|endoftext|end_of_turn|eot_id)\|>/g, '');
+        }
+        i = close + closeTag.length;
+        if (buf[i] === '\n') i++;
+        state.tag = null;
+        continue;
       }
+
+      let bestTag: string | null = null;
+      let bestIdx = -1;
+      let bestOpenLen = 0;
+
+      for (const tag of tags) {
+        const open = `<${tag}>`;
+        const idx = buf.indexOf(open, i);
+        if (idx !== -1 && (bestIdx === -1 || idx < bestIdx)) {
+          bestIdx = idx;
+          bestTag = tag;
+          bestOpenLen = open.length;
+        }
+      }
+
+      if (bestIdx === -1 || !bestTag) {
+        out += buf.slice(i);
+        break;
+      }
+
+      out += buf.slice(i, bestIdx);
+      i = bestIdx + bestOpenLen;
+      state.tag = bestTag;
     }
+
+    // Keep trailing partial delimiter for the next chunk to avoid leaking fragment tokens.
+    const partial = out.match(/<[\/a-zA-Z_-]*$/);
+    if (!state.tag && partial && partial.index !== undefined) {
+      out = out.slice(0, partial.index);
+      state.pending = partial[0];
+    }
+
     return out.replace(/<\|(startofstream|endofstream|im_start|im_end|endoftext|end_of_turn|eot_id)\|>/g, '');
   }
 
-  /** Compute whether we're inside a think block after processing `raw`. */
-  private computeThinkState(raw: string, was: boolean): boolean {
-    let inside = was;
-    let i = 0;
-    while (i < raw.length) {
-      if (inside) {
-        const close = raw.indexOf('</think>', i);
-        if (close === -1) return true;
-        i = close + '</think>'.length;
-        inside = false;
-      } else {
-        const open = raw.indexOf('<think>', i);
-        if (open === -1) return false;
-        i = open + '<think>'.length;
-        inside = true;
+  /**
+   * Gemma-only channel filter with cross-chunk pending support.
+   * Hides thought/analysis channels while preserving function-call channels.
+   */
+  private filterGemmaChannelContent(raw: string, state: GemmaChannelState): string {
+    const channelTokenRe = /<\|?channel\|?>\s*([^\n<]*)/gi;
+    let buf = state.pending + raw;
+    state.pending = '';
+
+    let cursor = 0;
+    let output = '';
+
+    for (const match of buf.matchAll(channelTokenRe)) {
+      const matchText = match[0] ?? '';
+      const index = match.index ?? 0;
+
+      const before = buf.slice(cursor, index);
+      if (!state.insideThought) {
+        output += before;
+      }
+
+      const rawLabel = (match[1] ?? '').trim();
+      const label = rawLabel.toLowerCase();
+
+      // Preserve function channels so downstream legacy tool parser can still decode calls.
+      if (label.startsWith('to=functions/')) {
+        state.insideThought = false;
+        output += matchText;
+      } else if (
+        label === 'thought'
+        || label === 'thinking'
+        || label === 'analysis'
+        || label === 'reasoning'
+        || label === 'reflection'
+        || label === 'commentary'
+      ) {
+        state.insideThought = true;
+      } else if (
+        label === 'final'
+        || label === 'assistant'
+        || label === 'response'
+        || label === 'answer'
+      ) {
+        state.insideThought = false;
+      }
+
+      cursor = index + matchText.length;
+    }
+
+    const tail = buf.slice(cursor);
+    if (!state.insideThought) {
+      output += tail;
+    }
+
+    // If a channel token starts but is incomplete, hold it for the next SSE chunk.
+    const partial = buf.match(/<\|?[a-zA-Z_]*$/);
+    if (partial && partial.index !== undefined && partial.index + partial[0].length === buf.length) {
+      state.pending = partial[0];
+      if (!state.insideThought && output.endsWith(partial[0])) {
+        output = output.slice(0, -partial[0].length);
       }
     }
-    return inside;
+
+    return output;
   }
 
   // ── Tool-call parsers ─────────────────────────────────────────────────

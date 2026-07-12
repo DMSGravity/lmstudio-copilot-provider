@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.30.2] - 2026-07-12
+
+### Change 21
+
+- Added Gemma-specific channel-thinking filtering with a user toggle (`lmstudio-copilot.gemmaChannelThinkingTransform`) to prevent reasoning leakage in Copilot Chat.
+- Strengthened Gemma stream filtering with cross-chunk pending-buffer handling for partial reasoning and channel delimiters.
+
+## [1.30.1] - 2026-07-12
+
+### Change 20
+
+- Fixed model input-token limits to honor configured `maxInputTokens` while still capping by each model's advertised max context length.
+
+## [1.30.0] - 2026-07-12
+
+### Change 19
+
+- Added automatic BYOK utility-model compatibility defaults to prevent the `copilot-utility-small` configuration error when utility settings are unset.
+
 ## [0.1.18] - 2026-06-16
 
 ### Change 18
