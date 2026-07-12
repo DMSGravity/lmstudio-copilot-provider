@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.30.3] - 2026-07-12
+
+### Change 22
+
+- Rebuild and republish release packaging for `1.30.3`.
+
 ## [1.30.2] - 2026-07-12
 
 ### Change 21
