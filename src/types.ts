@@ -137,7 +137,7 @@ export interface ChatCompletionRequest {
   /** Qwen3 / thinking models: set false to skip generating a reasoning trace */
   enable_thinking?: boolean;
   /** OpenAI-style reasoning effort hint for models that support it (e.g. o1, o3, QwQ) */
-  reasoning_effort?: 'low' | 'medium' | 'high';
+  reasoning_effort?: 'none' |'low' | 'medium' | 'high';
 }
 
 /**

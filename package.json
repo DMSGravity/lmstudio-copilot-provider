@@ -194,6 +194,7 @@
             "type": "string",
             "enum": [
               "default",
+              "none",
               "low",
               "medium",
               "high"
