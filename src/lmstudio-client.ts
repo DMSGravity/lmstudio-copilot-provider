@@ -764,7 +764,7 @@ export class LMStudioClient {
    * Hides thought/analysis channels while preserving function-call channels.
    */
   private filterGemmaChannelContent(raw: string, state: GemmaChannelState): string {
-    const channelTokenRe = /<\|?channel\|?>\s*([^\n<]*)/gi;
+    const channelTokenRe = /(<channel\|>)|(<\|channel\|>|<\|channel>)\s*([^\n<]*)/gi;
     let buf = state.pending + raw;
     state.pending = '';
 
@@ -780,11 +780,14 @@ export class LMStudioClient {
         output += before;
       }
 
-      const rawLabel = (match[1] ?? '').trim();
+      const isMalformedClose = Boolean(match[1]);
+      const rawLabel = (isMalformedClose ? '' : match[3] ?? '').trim();
       const label = rawLabel.toLowerCase();
 
       // Preserve function channels so downstream legacy tool parser can still decode calls.
-      if (label.startsWith('to=functions/')) {
+      if (isMalformedClose) {
+        state.insideThought = false;
+      } else if (label.startsWith('to=functions/')) {
         state.insideThought = false;
         output += matchText;
       } else if (
