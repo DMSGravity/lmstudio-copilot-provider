@@ -213,7 +213,21 @@ npm run package
 
 # Build a VSIX for local install / Marketplace submission
 npm run package:vsix
+
+# Publish to VS Code Marketplace (requires VSCE_PAT)
+npm run publish:vsce
 ```
+
+### Release workflow
+
+Typical release flow used by this project:
+
+1. Rebuild: `npm run compile`
+2. Production bundle: `npm run package`
+3. VSIX artifact: `npm run package:vsix`
+4. Publish: `npm run publish:vsce`
+
+If publishing from CI or a non-interactive shell, export `VSCE_PAT` before step 4.
 
 ## License
 

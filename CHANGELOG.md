@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.30.4] - 2026-07-31
+
+### Change 23
+
+- Rebuilt the extension from source and verified TypeScript/type-check + production bundle pipeline.
+- Refreshed release docs in `README.md` to reflect the current package and Marketplace deployment flow.
+
 ## [1.30.3] - 2026-07-12
 
 ### Change 22
