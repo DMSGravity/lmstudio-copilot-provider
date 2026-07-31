@@ -70,7 +70,9 @@ export async function activate(context: vscode.ExtensionContext) {
     outputChannel.show(true);
   }
 
-  await applyByokUtilityModelAutoFix(logger);
+  void applyByokUtilityModelAutoFix(logger).catch((error) => {
+    logger.warn(`BYOK utility model auto-fix skipped due to error: ${error}`);
+  });
 
   const client = new LMStudioClient(logger);
   provider = new LMStudioProvider(client, context, logger);
