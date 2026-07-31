@@ -490,8 +490,11 @@ export class LMStudioClient {
 
     const reasoningEffort = clientConfig.get<string>('reasoningEffort', 'default');
     if (reasoningEffort !== 'default') {
-      body.reasoning_effort = reasoningEffort as 'low' | 'medium' | 'high';
+      body.reasoning_effort = reasoningEffort as 'none' | 'low' | 'medium' | 'high';
       this.log(`reasoning_effort=${reasoningEffort} (user setting)`);
+    } else if (!enableThinking) {
+      body.reasoning_effort = 'none';
+      this.log("reasoning_effort=none (derived from enableThinking=false)");
     }
     if (options.tools?.length) {
       body.tools = options.tools;
@@ -764,7 +767,7 @@ export class LMStudioClient {
    * Hides thought/analysis channels while preserving function-call channels.
    */
   private filterGemmaChannelContent(raw: string, state: GemmaChannelState): string {
-    const channelTokenRe = /<\|?channel\|?>\s*([^\n<]*)/gi;
+    const channelTokenRe = /(<channel\|>)|(<\|channel\|>|<\|channel>)\s*([^\n<]*)/gi;
     let buf = state.pending + raw;
     state.pending = '';
 
@@ -780,11 +783,14 @@ export class LMStudioClient {
         output += before;
       }
 
-      const rawLabel = (match[1] ?? '').trim();
+      const isMalformedClose = Boolean(match[1]);
+      const rawLabel = (isMalformedClose ? '' : match[3] ?? '').trim();
       const label = rawLabel.toLowerCase();
 
       // Preserve function channels so downstream legacy tool parser can still decode calls.
-      if (label.startsWith('to=functions/')) {
+      if (isMalformedClose) {
+        state.insideThought = false;
+      } else if (label.startsWith('to=functions/')) {
         state.insideThought = false;
         output += matchText;
       } else if (
