@@ -1,23 +1,57 @@
 {
-  "version": "2.0.0",
-  "tasks": [
-    {
-      "type": "npm",
-      "script": "compile",
-      "problemMatcher": ["$tsc"],
-      "label": "npm: compile",
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      }
-    },
-    {
-      "type": "npm",
-      "script": "watch",
-      "problemMatcher": ["$tsc-watch"],
-      "label": "npm: watch",
-      "isBackground": true,
-      "group": "build"
-    }
-  ]
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"type": "npm",
+			"script": "compile",
+			"problemMatcher": [
+				"$tsc"
+			],
+			"label": "npm: compile",
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
+		},
+		{
+			"type": "npm",
+			"script": "watch",
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"label": "npm: watch",
+			"isBackground": true,
+			"group": "build"
+		},
+		{
+			"label": "npm: package",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"package"
+			],
+			"group": "build"
+		},
+		{
+			"label": "npm: package:vsix",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"package:vsix"
+			],
+			"group": "build"
+		},
+		{
+			"label": "npm: publish:vsce",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"publish:vsce"
+			],
+			"group": "build"
+		}
+	]
 }
