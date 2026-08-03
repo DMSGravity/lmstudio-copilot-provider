@@ -52,6 +52,26 @@
 				"publish:vsce"
 			],
 			"group": "build"
+		},
+		{
+			"label": "npm: package:vsix",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"package:vsix"
+			],
+			"group": "build"
+		},
+		{
+			"label": "npm: publish:vsce",
+			"type": "shell",
+			"command": "npm",
+			"args": [
+				"run",
+				"publish:vsce"
+			],
+			"group": "build"
 		}
 	]
 }

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.30.5] - 2026-08-03
+
+### Change 24
+
+- Rebuilt the extension after the latest code changes and verified compilation/type-checking.
+- Bumped release version for Marketplace publication.
+
 ## [1.30.4] - 2026-07-31
 
 ### Change 23
