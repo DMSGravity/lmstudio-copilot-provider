@@ -8,6 +8,7 @@ let provider: LMStudioProvider | undefined;
 let registration: vscode.Disposable | undefined;
 let outputChannel: vscode.OutputChannel;
 let lmStudioTerminal: vscode.Terminal | undefined;
+let client: LMStudioClient;
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -74,8 +75,18 @@ export async function activate(context: vscode.ExtensionContext) {
     logger.warn(`BYOK utility model auto-fix skipped due to error: ${error}`);
   });
 
-  const client = new LMStudioClient(logger);
-  provider = new LMStudioProvider(client, context, logger);
+  const registerProvider = (): void => {
+    registration?.dispose();
+    provider?.dispose();
+
+    client = new LMStudioClient(logger);
+    provider = new LMStudioProvider(client, context, logger);
+
+    registration = vscode.lm.registerLanguageModelChatProvider('lmstudio', provider);
+    logger.info('✅ Provider registered successfully with vendor: lmstudio');
+  };
+
+  registerProvider();
 
   const getOrCreateTerminalByName = (terminalName: string): vscode.Terminal => {
     const existing = vscode.window.terminals.find((t) => t.name === terminalName);
@@ -159,16 +170,6 @@ export async function activate(context: vscode.ExtensionContext) {
     vscode.window.showInformationMessage('LM Studio terminal stopped.');
   };
 
-  // Register the provider with VS Code
-  try {
-    registration = vscode.lm.registerLanguageModelChatProvider('lmstudio', provider);
-    context.subscriptions.push(registration);
-    logger.info('✅ Provider registered successfully with vendor: lmstudio');
-  } catch (error) {
-    logger.error(`❌ Failed to register provider: ${error}`);
-    vscode.window.showErrorMessage(`Failed to register LM Studio provider: ${error}`);
-  }
-
   // Register all LM tools (terminal, read_file, write_file, list_directory, search_files)
   registerAllTools(context, logger);
 
@@ -232,6 +233,10 @@ export async function activate(context: vscode.ExtensionContext) {
   context.subscriptions.push(
     vscode.workspace.onDidChangeConfiguration((e) => {
       if (e.affectsConfiguration('lmstudio-copilot')) {
+        if (e.affectsConfiguration('lmstudio-copilot.apiKey')) {
+          logger.info('API key changed, re-registering provider to refresh authenticated requests');
+          registerProvider();
+        }
         logger.info('Configuration changed, refreshing models...');
         provider?.refreshModels();
       }
@@ -254,6 +259,8 @@ export async function activate(context: vscode.ExtensionContext) {
 }
 
 export function deactivate() {
+  registration?.dispose();
+  registration = undefined;
   lmStudioTerminal?.dispose();
   lmStudioTerminal = undefined;
   provider?.dispose();
