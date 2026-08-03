@@ -8,3 +8,4 @@ dist/
 #Ignore vscode AI rules
 .github/instructions/codacy.instructions.md
 .vscode/settings.json
+/run/media/dan/EXTRA/vscode extension/.chatgpt-workspace-exposure-mcp/instance.lock
