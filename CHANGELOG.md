@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.30.6] - 2026-08-16
+
+### Change 25
+
+- Merged fix for Windows terminal command execution: terminal commands now run via VS Code shell integration with reliable output capture.
+- Rebuilt and republished the extension for Marketplace.
+
 ## [1.30.5] - 2026-08-03
 
 ### Change 24
