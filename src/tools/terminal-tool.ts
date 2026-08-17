@@ -34,12 +34,17 @@ async function waitForShellIntegration(
   timeoutMs: number,
   token: vscode.CancellationToken,
 ): Promise<vscode.TerminalShellIntegration | undefined> {
+  if (token.isCancellationRequested) {
+    return undefined;
+  }
+
   if (terminal.shellIntegration) {
     return terminal.shellIntegration;
   }
 
   return new Promise((resolve) => {
     let finished = false;
+    let cancelDisposable: vscode.Disposable | undefined;
 
     const finish = (value: vscode.TerminalShellIntegration | undefined) => {
       if (finished) {
@@ -48,6 +53,7 @@ async function waitForShellIntegration(
       finished = true;
       disposable.dispose();
       clearTimeout(timeout);
+      cancelDisposable?.dispose();
       resolve(value);
     };
 
@@ -61,20 +67,22 @@ async function waitForShellIntegration(
       finish(undefined);
     }, timeoutMs);
 
-    if (token.isCancellationRequested) {
+    cancelDisposable = token.onCancellationRequested(() => {
       finish(undefined);
-    }
+    });
   });
 }
 
-function normalizePathForComparison(path: string): string {
-  let result = path.trim();
+function normalizePathForComparison(inputPath: string): string {
+  let result = inputPath.trim();
 
   if (process.platform === 'win32') {
     result = result.replace(/\//g, '\\').toLowerCase();
     if (result.length > 3) {
       result = result.replace(/[\\]+$/, '');
     }
+  } else if (result.length > 1) {
+    result = result.replace(/[\/]+$/, '');
   }
 
   return result;
@@ -168,23 +176,33 @@ async function executeInTerminal(
   const execution = shellIntegration.executeCommand(command);
 
   const outputChunks: string[] = [];
+  const outputIterator = execution.read()[Symbol.asyncIterator]();
 
   const readPromise = (async () => {
-    for await (const data of execution.read()) {
+    while (true) {
+      const next = await outputIterator.next();
+      if (next.done) {
+        break;
+      }
       if (token.isCancellationRequested) {
         break;
       }
-      outputChunks.push(data);
+      outputChunks.push(next.value);
     }
   })();
 
-  const exitCode = await waitForExecutionEnd(execution, timeoutMs, token);
-  await readPromise;
-
-  return {
-    output: outputChunks.join(''),
-    exitCode,
-  };
+  try {
+    const exitCode = await waitForExecutionEnd(execution, timeoutMs, token);
+    await readPromise;
+    return {
+      output: outputChunks.join(''),
+      exitCode,
+    };
+  } catch (error) {
+    await outputIterator.return?.();
+    await readPromise.catch(() => undefined);
+    throw error;
+  }
 }
 
 export function createTerminalTool(logger: Logger): vscode.LanguageModelTool<TerminalToolInput> {
