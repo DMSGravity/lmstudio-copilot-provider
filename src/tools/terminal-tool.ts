@@ -1,5 +1,4 @@
 import * as vscode from 'vscode';
-import * as cp from 'child_process';
 import { Logger } from '../logger';
 
 export const TERMINAL_TOOL_NAME = 'lmstudio_run_in_terminal';
@@ -9,32 +8,8 @@ interface TerminalToolInput {
   cwd?: string;
 }
 
-interface ExecResult {
-  stdout: string;
-  stderr: string;
-  exitCode: number;
-}
-
 function getWorkspaceCwd(): string {
   return vscode.workspace.workspaceFolders?.[0]?.uri?.fsPath ?? process.cwd();
-}
-
-function execAsync(command: string, cwd: string, timeoutMs: number): Promise<ExecResult> {
-  return new Promise((resolve) => {
-    cp.exec(
-      command,
-      { cwd, timeout: timeoutMs, maxBuffer: 1024 * 1024 * 10, shell: '/bin/bash' },
-      (error, stdout, stderr) => {
-        resolve({
-          stdout: stdout.toString(),
-          stderr: stderr.toString(),
-          exitCode: typeof (error as NodeJS.ErrnoException | null)?.code === 'number'
-            ? (error as NodeJS.ErrnoException).code as unknown as number
-            : error ? 1 : 0,
-        });
-      }
-    );
-  });
 }
 
 function truncate(text: string, maxChars: number): string {
@@ -52,6 +27,182 @@ function truncate(text: string, maxChars: number): string {
 
 function makeResult(text: string): vscode.LanguageModelToolResult {
   return new vscode.LanguageModelToolResult([new vscode.LanguageModelTextPart(text)]);
+}
+
+async function waitForShellIntegration(
+  terminal: vscode.Terminal,
+  timeoutMs: number,
+  token: vscode.CancellationToken,
+): Promise<vscode.TerminalShellIntegration | undefined> {
+  if (token.isCancellationRequested) {
+    return undefined;
+  }
+
+  if (terminal.shellIntegration) {
+    return terminal.shellIntegration;
+  }
+
+  return new Promise((resolve) => {
+    let finished = false;
+    let cancelDisposable: vscode.Disposable | undefined;
+
+    const finish = (value: vscode.TerminalShellIntegration | undefined) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      disposable.dispose();
+      clearTimeout(timeout);
+      cancelDisposable?.dispose();
+      resolve(value);
+    };
+
+    const disposable = vscode.window.onDidChangeTerminalShellIntegration((event) => {
+      if (event.terminal === terminal) {
+        finish(event.shellIntegration);
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      finish(undefined);
+    }, timeoutMs);
+
+    cancelDisposable = token.onCancellationRequested(() => {
+      finish(undefined);
+    });
+  });
+}
+
+function normalizePathForComparison(inputPath: string): string {
+  let result = inputPath.trim();
+
+  if (process.platform === 'win32') {
+    result = result.replace(/\//g, '\\').toLowerCase();
+    if (result.length > 3) {
+      result = result.replace(/[\\]+$/, '');
+    }
+  } else if (result.length > 1) {
+    result = result.replace(/[\/]+$/, '');
+  }
+
+  return result;
+}
+
+function findTerminalForCwd(terminalName: string, cwd: string): vscode.Terminal | undefined {
+  const wanted = normalizePathForComparison(cwd);
+
+  return vscode.window.terminals.find((terminal) => {
+    if (terminal.name !== terminalName) {
+      return false;
+    }
+
+    const terminalCwd = terminal.shellIntegration?.cwd?.fsPath;
+
+    if (!terminalCwd) {
+      return false;
+    }
+
+    return normalizePathForComparison(terminalCwd) === wanted;
+  });
+}
+
+function waitForExecutionEnd(
+  execution: vscode.TerminalShellExecution,
+  timeoutMs: number,
+  token: vscode.CancellationToken,
+): Promise<number | undefined> {
+  return new Promise((resolve, reject) => {
+    let finished = false;
+
+    const finish = (exitCode: number | undefined) => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      disposable.dispose();
+      clearTimeout(timeout);
+      cancelDisposable.dispose();
+      resolve(exitCode);
+    };
+
+    const disposable = vscode.window.onDidEndTerminalShellExecution((event) => {
+      if (event.execution === execution) {
+        finish(event.exitCode);
+      }
+    });
+
+    const timeout = setTimeout(() => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      disposable.dispose();
+      cancelDisposable.dispose();
+      reject(new Error(`Command timed out after ${timeoutMs} ms.`));
+    }, timeoutMs);
+
+    const cancelDisposable = token.onCancellationRequested(() => {
+      if (finished) {
+        return;
+      }
+      finished = true;
+      disposable.dispose();
+      clearTimeout(timeout);
+      cancelDisposable.dispose();
+      reject(new Error('Command cancelled.'));
+    });
+  });
+}
+
+async function executeInTerminal(
+  terminal: vscode.Terminal,
+  command: string,
+  timeoutMs: number,
+  token: vscode.CancellationToken,
+): Promise<{ output: string; exitCode: number | undefined }> {
+  const shellIntegration = await waitForShellIntegration(terminal, 5000, token);
+
+  if (!shellIntegration) {
+    throw new Error(
+      'VS Code shell integration is not available for this terminal. ' +
+      'Make sure terminal.integrated.shellIntegration.enabled is true.',
+    );
+  }
+
+  if (token.isCancellationRequested) {
+    throw new Error('Command cancelled.');
+  }
+
+  const execution = shellIntegration.executeCommand(command);
+
+  const outputChunks: string[] = [];
+  const outputIterator = execution.read()[Symbol.asyncIterator]();
+
+  const readPromise = (async () => {
+    while (true) {
+      const next = await outputIterator.next();
+      if (next.done) {
+        break;
+      }
+      if (token.isCancellationRequested) {
+        break;
+      }
+      outputChunks.push(next.value);
+    }
+  })();
+
+  try {
+    const exitCode = await waitForExecutionEnd(execution, timeoutMs, token);
+    await readPromise;
+    return {
+      output: outputChunks.join(''),
+      exitCode,
+    };
+  } catch (error) {
+    await outputIterator.return?.();
+    await readPromise.catch(() => undefined);
+    throw error;
+  }
 }
 
 export function createTerminalTool(logger: Logger): vscode.LanguageModelTool<TerminalToolInput> {
@@ -80,39 +231,40 @@ export function createTerminalTool(logger: Logger): vscode.LanguageModelTool<Ter
       }
 
       const cwd = options.input.cwd?.trim() || getWorkspaceCwd();
-      logger.verbose(`[run_in_terminal] cwd=${cwd}  cmd=${command}`);
+      logger.verbose(`[run_in_terminal] cwd=${cwd} cmd=${command}`);
 
-      // Show the command in the named terminal so the user can follow along
-      // Only reuse a terminal that is still alive (exitStatus === undefined means it hasn't exited)
-      const existing = vscode.window.terminals.find((t) => t.name === terminalName && t.exitStatus === undefined);
-      const terminal = existing ?? vscode.window.createTerminal({ name: terminalName });
+      let terminal = findTerminalForCwd(terminalName, cwd);
+      if (!terminal) {
+        terminal = vscode.window.createTerminal({ name: terminalName, cwd });
+      }
+
       terminal.show(true);
-      terminal.sendText(command, true);
 
-      // Execute with real output capture
-      const { stdout, stderr, exitCode } = await execAsync(command, cwd, timeoutMs);
-      logger.verbose(
-        `[run_in_terminal] exit=${exitCode}  stdout=${stdout.length}b  stderr=${stderr.length}b`
-      );
+      try {
+        const result = await executeInTerminal(terminal, command, timeoutMs, token);
+        const output = result.output;
+        const exitCode = result.exitCode;
 
-      // Budget-aware output size — ~3 chars per token is a safe estimate
-      const budgetChars = options.tokenizationOptions?.tokenBudget
-        ? options.tokenizationOptions.tokenBudget * 3
-        : 12000;
+        logger.verbose(`[run_in_terminal] exit=${exitCode ?? 'unknown'} output=${output.length}b`);
 
-      const parts: string[] = [`exit_code: ${exitCode}`];
+        const budgetChars = options.tokenizationOptions?.tokenBudget
+          ? options.tokenizationOptions.tokenBudget * 3
+          : 12000;
 
-      if (stdout.trim()) {
-        parts.push(`stdout:\n${truncate(stdout.trimEnd(), Math.floor(budgetChars * 0.7))}`);
+        const parts: string[] = [`exit_code: ${exitCode ?? 'unknown'}`];
+
+        if (output.trim()) {
+          parts.push(`output:\n${truncate(output.trimEnd(), Math.floor(budgetChars * 0.9))}`);
+        } else {
+          parts.push('(no output)');
+        }
+
+        return makeResult(parts.join('\n\n'));
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        logger.verbose(`[run_in_terminal] error: ${message}`);
+        return makeResult(`Terminal execution error: ${message}`);
       }
-      if (stderr.trim()) {
-        parts.push(`stderr:\n${truncate(stderr.trimEnd(), Math.floor(budgetChars * 0.25))}`);
-      }
-      if (!stdout.trim() && !stderr.trim()) {
-        parts.push('(no output)');
-      }
-
-      return makeResult(parts.join('\n\n'));
     },
   };
 }
