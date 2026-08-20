@@ -73,6 +73,22 @@ async function waitForShellIntegration(
   });
 }
 
+async function createFreshTerminal(
+  terminalName: string,
+  cwd: string,
+  token: vscode.CancellationToken,
+  shellIntegrationTimeoutMs: number,
+): Promise<{ terminal: vscode.Terminal; shellIntegration: vscode.TerminalShellIntegration | undefined }> {
+  const terminal = vscode.window.createTerminal({
+    name: terminalName,
+    cwd,
+    env: { VSCODE_SHELL_INTEGRATION: '1' },
+  });
+  terminal.show(true);
+  const shellIntegration = await waitForShellIntegration(terminal, shellIntegrationTimeoutMs, token);
+  return { terminal, shellIntegration };
+}
+
 function normalizePathForComparison(inputPath: string): string {
   let result = inputPath.trim();
 
@@ -155,19 +171,11 @@ function waitForExecutionEnd(
 }
 
 async function executeInTerminal(
-  terminal: vscode.Terminal,
+  shellIntegration: vscode.TerminalShellIntegration,
   command: string,
   timeoutMs: number,
   token: vscode.CancellationToken,
 ): Promise<{ output: string; exitCode: number | undefined }> {
-  const shellIntegration = await waitForShellIntegration(terminal, 5000, token);
-
-  if (!shellIntegration) {
-    throw new Error(
-      'VS Code shell integration is not available for this terminal. ' +
-      'Make sure terminal.integrated.shellIntegration.enabled is true.',
-    );
-  }
 
   if (token.isCancellationRequested) {
     throw new Error('Command cancelled.');
@@ -233,15 +241,39 @@ export function createTerminalTool(logger: Logger): vscode.LanguageModelTool<Ter
       const cwd = options.input.cwd?.trim() || getWorkspaceCwd();
       logger.verbose(`[run_in_terminal] cwd=${cwd} cmd=${command}`);
 
+      const shellIntegrationTimeoutMs = 10000;
+
+      // Try to reuse an existing terminal with shell integration for this cwd.
       let terminal = findTerminalForCwd(terminalName, cwd);
-      if (!terminal) {
-        terminal = vscode.window.createTerminal({ name: terminalName, cwd });
+      let shellIntegration: vscode.TerminalShellIntegration | undefined;
+
+      if (terminal) {
+        terminal.show(true);
+        shellIntegration = await waitForShellIntegration(terminal, shellIntegrationTimeoutMs, token);
+        if (!shellIntegration) {
+          // Existing terminal lost shell integration; dispose it and open a fresh one.
+          logger.verbose('[run_in_terminal] existing terminal has no shell integration, recreating');
+          terminal.dispose();
+          terminal = undefined;
+        }
       }
 
-      terminal.show(true);
+      if (!terminal) {
+        const created = await createFreshTerminal(terminalName, cwd, token, shellIntegrationTimeoutMs);
+        terminal = created.terminal;
+        shellIntegration = created.shellIntegration;
+      }
+
+      if (!shellIntegration) {
+        return makeResult(
+          'Terminal execution error: VS Code shell integration is not available. ' +
+          'Please ensure "terminal.integrated.shellIntegration.enabled" is set to true ' +
+          'in your VS Code settings, restart the terminal, and try again.',
+        );
+      }
 
       try {
-        const result = await executeInTerminal(terminal, command, timeoutMs, token);
+        const result = await executeInTerminal(shellIntegration, command, timeoutMs, token);
         const output = result.output;
         const exitCode = result.exitCode;
 
